@@ -7,6 +7,28 @@ const MIN_PLAYER_DAMAGE = 1;
 const MIN_ENEMY_DAMAGE = 0;
 const DEFAULT_FLEE_DIFFICULTY = 0.45;
 
+function getEnemyHooks(enemy) {
+  const hooks = enemy.hooks && typeof enemy.hooks === 'object' ? enemy.hooks : {};
+  return {
+    on_attack: Array.isArray(hooks.on_attack)
+      ? hooks.on_attack
+      : (Array.isArray(enemy.on_attack) ? enemy.on_attack : []),
+    on_hit: Array.isArray(hooks.on_hit) ? hooks.on_hit : [],
+    on_miss: Array.isArray(hooks.on_miss) ? hooks.on_miss : [],
+    on_defeat: Array.isArray(hooks.on_defeat)
+      ? hooks.on_defeat
+      : (Array.isArray(enemy.on_defeat) ? enemy.on_defeat : []),
+  };
+}
+
+async function runEnemyHook(enemy, key, state, ctx) {
+  const hooks = getEnemyHooks(enemy);
+  const events = hooks[key];
+  if (Array.isArray(events) && events.length) {
+    await runEvents(events, state, ctx);
+  }
+}
+
 function ensureCombatMeta(state) {
   if (!state.combat) {
     state.combat = { defending: false, enemyStartHp: null, weaponDefense: 0 };
@@ -36,6 +58,7 @@ export async function startCombat(enemyId, state, ctx) {
   const enemy = await ctx.loadEnemy(enemyId);
   state.inCombat = true;
   state.enemy = JSON.parse(JSON.stringify(enemy));
+  state.enemy.hooks = getEnemyHooks(state.enemy);
   if (!state.stats.maxHp) {
     state.stats.maxHp = state.stats.hp;
   }
@@ -120,16 +143,26 @@ export async function handleCombatAction(action, state, ctx) {
 }
 
 async function playerAttack(enemy, state, ctx, combatMeta, attackOverride = null, sourceLabel = null) {
+  await runEnemyHook(enemy, 'on_attack', state, ctx);
+
   const attackValue = attackOverride ?? state.stats.attack ?? MIN_PLAYER_DAMAGE;
-  const playerDamage = Math.max(
-    MIN_PLAYER_DAMAGE,
-    attackValue - (enemy.stats.defense || 0)
-  );
+  const rawDamage = attackValue - (enemy.stats.defense || 0);
+  const hit = rawDamage > 0;
+  const playerDamage = hit ? Math.max(MIN_PLAYER_DAMAGE, rawDamage) : 0;
+
+  if (!hit) {
+    advLog([`Du greifst ${enemy.name} an, verfehlst jedoch oder dein Schlag prallt ab.`]);
+    await runEnemyHook(enemy, 'on_miss', state, ctx);
+    combatMeta.defending = false;
+    return;
+  }
+
   enemy.stats.hp -= playerDamage;
   const attackLabel = sourceLabel ? `Mit ${sourceLabel} triffst du` : 'Du triffst';
   advLog([
     `${attackLabel} ${enemy.name} für ${playerDamage} Schaden. (${Math.max(enemy.stats.hp, 0)} HP übrig)`
   ]);
+  await runEnemyHook(enemy, 'on_hit', state, ctx);
 
   if (enemy.stats.hp <= 0) {
     await handleVictory(enemy, state, ctx);
@@ -151,10 +184,6 @@ async function enemyAttack(enemy, state, ctx, combatMeta) {
   advLog([
     `${enemy.name} greift an und verursacht ${enemyDamage} Schaden${defenseNote}. (${Math.max(state.stats.hp, 0)} HP übrig)`
   ]);
-
-  if (Array.isArray(enemy.on_attack) && enemy.on_attack.length) {
-    await runEvents(enemy.on_attack, state, ctx);
-  }
 
   combatMeta.defending = false;
   combatMeta.weaponDefense = 0;
@@ -187,9 +216,7 @@ async function handleVictory(enemy, state, ctx) {
     }
   }
 
-  if (Array.isArray(enemy.on_defeat) && enemy.on_defeat.length) {
-    await runEvents(enemy.on_defeat, state, ctx);
-  }
+  await runEnemyHook(enemy, 'on_defeat', state, ctx);
 
   endCombat(state);
   renderStatus(state);

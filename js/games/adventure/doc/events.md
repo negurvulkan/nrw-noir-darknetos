@@ -58,7 +58,12 @@ Mehrere Events in Reihe:
 
 * Gegner liegen unter `adventures/<name>/enemies/*.json` und enthalten mindestens `id`, `name`, `description` sowie `stats` (hp/attack/defense).
 * Kämpfe unterstützen mehrere Aktionen: `attack`, `defend` (Schaden halbieren), `flee` (Fluchtchance, konfigurierbar über `behavior.fleeDifficulty`) und `use <item>` für Items mit `combat_effects`.
-* Gegner können optionale Event-Hooks besitzen: `on_attack` wird nach dem Angriff des Gegners aufgerufen, `on_defeat` nach dem Sieg des Spielers. Hier können weitere Events wie Loot, Flaggen oder ASCII-Ausgaben ausgeführt werden.
+* Gegner können optionale Event-Hooks besitzen (alle Felder unter `hooks`):
+  * `on_attack` läuft immer, sobald der Spieler „attack“ wählt – vor der Trefferprüfung.
+  * `on_hit` läuft nur, wenn der Angriff trifft und Schaden verursacht.
+  * `on_miss` läuft nur, wenn der Angriff verfehlt oder geblockt wird (kein Schaden).
+  * `on_defeat` wird nach dem Sieg des Spielers ausgeführt.
+  Legacy-Felder `on_attack` und `on_defeat` werden weiterhin unterstützt, sollten aber nach `hooks.*` migriert werden.
 
 ---
 

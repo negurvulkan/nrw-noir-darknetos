@@ -286,6 +286,30 @@ function existingIdsFor(entityType) {
   return (state.data[key] || []).map(e => e.id).filter(Boolean);
 }
 
+function normalizeEnemyHooks(enemy, options = {}) {
+  const hooks = enemy.hooks && typeof enemy.hooks === 'object' ? enemy.hooks : {};
+  const normalized = {
+    on_attack: Array.isArray(hooks.on_attack)
+      ? hooks.on_attack
+      : (Array.isArray(enemy.on_attack) ? enemy.on_attack : []),
+    on_hit: Array.isArray(hooks.on_hit) ? hooks.on_hit : [],
+    on_miss: Array.isArray(hooks.on_miss) ? hooks.on_miss : [],
+    on_defeat: Array.isArray(hooks.on_defeat)
+      ? hooks.on_defeat
+      : (Array.isArray(enemy.on_defeat) ? enemy.on_defeat : []),
+  };
+  enemy.hooks = normalized;
+  if (options.removeLegacy) {
+    delete enemy.on_attack;
+    delete enemy.on_defeat;
+  }
+  return enemy;
+}
+
+function normalizeEnemies(data, options = {}) {
+  (data.enemies || []).forEach(enemy => normalizeEnemyHooks(enemy, options));
+}
+
 function currentEntityType() {
   if (state.selection.view === 'room') return 'room';
   if (state.selection.view === 'item') return 'item';
@@ -319,8 +343,10 @@ function eventTargets() {
   if (state.selection.view === 'enemy') {
     const enemy = getSelectedEntity('enemy');
     if (enemy) {
-      targets.push({ value: 'enemy:on_attack', label: 'Gegner · On Attack', apply: (events) => updateEnemy(enemy, 'on_attack', events) });
-      targets.push({ value: 'enemy:on_defeat', label: 'Gegner · On Defeat', apply: (events) => updateEnemy(enemy, 'on_defeat', events) });
+      targets.push({ value: 'enemy:on_attack', label: 'Gegner · On Attack', apply: (events) => updateEnemyHook(enemy, 'on_attack', events) });
+      targets.push({ value: 'enemy:on_hit', label: 'Gegner · On Hit', apply: (events) => updateEnemyHook(enemy, 'on_hit', events) });
+      targets.push({ value: 'enemy:on_miss', label: 'Gegner · On Miss', apply: (events) => updateEnemyHook(enemy, 'on_miss', events) });
+      targets.push({ value: 'enemy:on_defeat', label: 'Gegner · On Defeat', apply: (events) => updateEnemyHook(enemy, 'on_defeat', events) });
     }
   }
   return targets;
@@ -519,6 +545,7 @@ async function openAdventure(id) {
     state.currentAdventure = res.adventure || state.adventures.find(a => a.id === id) || { id };
     state.data = res.data || res;
     state.data.enemies = state.data.enemies || [];
+    normalizeEnemies(state.data);
     ensureNpcCollection(state.data);
     ensureDialogState(state.data);
     state.asciiFiles = res.ascii || res.asciiFiles || [];
@@ -906,8 +933,10 @@ function renderEnemyEditor() {
     (vals) => updateEnemy(enemy, 'drops', vals)
   ));
 
-  card.appendChild(eventArea('On Attack', enemy.on_attack || [], (val) => updateEnemy(enemy, 'on_attack', val)));
-  card.appendChild(eventArea('On Defeat', enemy.on_defeat || [], (val) => updateEnemy(enemy, 'on_defeat', val)));
+  card.appendChild(eventArea('On Attack', enemy.hooks?.on_attack || [], (val) => updateEnemyHook(enemy, 'on_attack', val)));
+  card.appendChild(eventArea('On Hit', enemy.hooks?.on_hit || [], (val) => updateEnemyHook(enemy, 'on_hit', val)));
+  card.appendChild(eventArea('On Miss', enemy.hooks?.on_miss || [], (val) => updateEnemyHook(enemy, 'on_miss', val)));
+  card.appendChild(eventArea('On Defeat', enemy.hooks?.on_defeat || [], (val) => updateEnemyHook(enemy, 'on_defeat', val)));
 
   const actions = document.createElement('div');
   actions.style.display = 'flex';
@@ -1585,6 +1614,12 @@ function updateEnemy(enemy, key, value) {
   setDirty(true);
 }
 
+function updateEnemyHook(enemy, key, value) {
+  normalizeEnemyHooks(enemy);
+  enemy.hooks[key] = value;
+  setDirty(true);
+}
+
 function updateEnemyAscii(enemy, key, value) {
   enemy.ascii = enemy.ascii || {};
   const parsed = key === 'fontSize' ? Number(value) : value;
@@ -1686,7 +1721,7 @@ function deleteObject(id) {
 function addEnemy() {
   const id = prompt('Neue Gegner-ID:');
   if (!id) return;
-  const enemy = { id, name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], on_attack: [], on_defeat: [] };
+  const enemy = { id, name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], hooks: { on_attack: [], on_hit: [], on_miss: [], on_defeat: [] } };
   state.data.enemies = state.data.enemies || [];
   state.data.enemies.push(enemy);
   state.selection = defaultSelection({ view: 'enemy', enemyId: id });
@@ -2023,6 +2058,7 @@ function prepareAdventureForSave(data) {
   data.enemies = data.enemies || [];
   const cloned = JSON.parse(JSON.stringify(data));
   applyExitLockingMetaToRooms(cloned);
+  normalizeEnemies(cloned, { removeLegacy: true });
   return cloned;
 }
 

@@ -13,7 +13,8 @@ Gegnerdaten steuern Kämpfe und Beute.
 ### Optionale Felder
 - **ascii**: `{ "file": "ascii/beast.txt", "fontSize": 5 }` wird beim Kampfstart geladen.
 - **drops**: Array von Item-IDs, die bei Sieg ins Inventar gelegt werden.
-- **on_attack**: Eventliste für Spezialeffekte (kann für Erweiterungen genutzt werden).
+- **hooks**: Objekt mit Eventlisten für Kampfmomente `{ on_attack: [], on_hit: [], on_miss: [], on_defeat: [] }`.
+  - Legacy-Felder `on_attack` und `on_defeat` werden weiterhin eingelesen, empfohlen ist jedoch das `hooks`-Objekt.
 
 ### Beispiel
 ```json
@@ -24,6 +25,11 @@ Gegnerdaten steuern Kämpfe und Beute.
   "description": "Etwas bewegt sich im Dunkeln.",
   "stats": { "hp": 12, "attack": 3, "defense": 1 },
   "drops": ["kristall_fragment"],
-  "on_attack": []
+  "hooks": {
+    "on_attack": [ { "type": "message", "text": "Du gehst entschlossen in den Angriff." } ],
+    "on_hit": [ { "type": "message", "text": "Die Bestie taumelt." } ],
+    "on_miss": [ { "type": "message", "text": "Der Schlag verpufft wirkungslos." } ],
+    "on_defeat": [ { "type": "message", "text": "Die Schatten zerfallen." } ]
+  }
 }
 ```
