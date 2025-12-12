@@ -1,8 +1,14 @@
 const BASE_URL = './api/api.php';
+const AI_URL = './api/ai.php';
 
 function handleResponse(res) {
-  if (!res.ok) throw new Error('Serverfehler: ' + res.status);
-  return res.json();
+  return res.json().then((json) => {
+    if (!res.ok) {
+      const message = json?.error || ('Serverfehler: ' + res.status);
+      throw new Error(message);
+    }
+    return json;
+  });
 }
 
 export const Api = {
@@ -32,6 +38,16 @@ export const Api = {
     return fetch(`${BASE_URL}?action=upload_ascii&id=${encodeURIComponent(id)}`, {
       method: 'POST',
       body: form
+    }).then(handleResponse);
+  },
+  async aiStatus() {
+    return fetch(AI_URL, { method: 'GET' }).then(handleResponse);
+  },
+  async aiAssist(payload) {
+    return fetch(AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     }).then(handleResponse);
   }
 };

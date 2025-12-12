@@ -187,6 +187,17 @@ button.danger { border-color: var(--error); color: var(--error); }
 .icon-button { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 50%; width: 32px; height: 32px; font-size: 18px; cursor: pointer; }
 .icon-button:hover { border-color: var(--accent); color: var(--accent); }
 
+.ai-assist { display: flex; flex-direction: column; gap: 12px; }
+.ai-status { padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(164,255,218,0.05); color: var(--success); }
+.ai-constraints { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ai-section { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; background: rgba(255,255,255,0.02); }
+.ai-section h4 { margin: 0 0 4px; }
+.ai-section .hint { margin: 0 0 10px; color: var(--text-dim); }
+.ai-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.ai-preview-actions { display: flex; flex-direction: column; gap: 8px; }
+.ai-preview { background: #050308; border: 1px solid var(--border); border-radius: 8px; padding: 12px; white-space: pre-wrap; min-height: 160px; }
+.ai-preview-actions button { align-self: flex-end; }
+
 .dialog-layout { display: grid; grid-template-columns: 260px 1fr; gap: 12px; }
 .dialog-nodes { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.02); box-shadow: var(--shadow); }
 .dialog-node-list { display: flex; flex-direction: column; }

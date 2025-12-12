@@ -1,3 +1,5 @@
 *.zip
 content-builder/storage/
 .DS_Store
+.env
+adventurebuilder/api/cache/
