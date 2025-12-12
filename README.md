@@ -28,3 +28,9 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - Terminal: `/`
 - Adventure Builder: `/adventurebuilder/`
 - Content Builder/API: `/content-builder/`
+
+## AI Assist (optional)
+
+- Die AI-Unterstützung für den Adventure Builder ist per `.env` steuerbar (`DARKNET_AI_ENABLED=1`).
+- Der OpenAI API Key (`OPENAI_API_KEY`) bleibt ausschließlich im Backend; Beispiele stehen in `.env-sample`.
+- Backend-Proxy: `/adventurebuilder/api/ai.php` (liefert 403, falls das Feature deaktiviert ist).

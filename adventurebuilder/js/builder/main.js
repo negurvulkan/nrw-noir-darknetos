@@ -14,6 +14,7 @@ const state = {
   asciiFiles: [],
   map: { scale: 1, x: 0, y: 0 },
   dialogMaps: {},
+  ai: { enabled: false, status: 'idle', lastResult: null, lastMode: null, lastEntityType: null },
 };
 
 const viewEl = document.getElementById('view');
@@ -25,6 +26,7 @@ const modalEl = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
+const aiButton = document.getElementById('btn-ai');
 
 function isFiniteNumber(val) {
   return typeof val === 'number' && Number.isFinite(val);
@@ -70,6 +72,343 @@ function defaultSelection(overrides = {}) {
   };
 }
 
+async function initAiAssist() {
+  if (!aiButton) return;
+  aiButton.disabled = true;
+  aiButton.title = 'AI Assist wird initialisiert...';
+  try {
+    const status = await Api.aiStatus();
+    state.ai.enabled = status.enabled === true;
+    state.ai.model = status.model;
+    state.ai.status = status.enabled ? 'ready' : 'disabled';
+    aiButton.disabled = !state.ai.enabled;
+    aiButton.title = state.ai.enabled ? 'AI Assist öffnen' : 'AI Assist ist deaktiviert';
+  } catch (e) {
+    state.ai.status = 'error';
+    aiButton.disabled = true;
+    aiButton.title = 'AI Assist nicht verfügbar: ' + e.message;
+  }
+}
+
+function openAiAssistModal() {
+  if (!state.ai.enabled) {
+    toast('AI Assist ist deaktiviert oder nicht verfügbar.', 'error');
+    return;
+  }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'ai-assist';
+
+  const status = document.createElement('div');
+  status.className = 'ai-status';
+  status.textContent = 'AI Assist aktiviert · Modell: ' + (state.ai.model || 'Servervorgabe');
+  wrapper.appendChild(status);
+
+  const constraintsRow = document.createElement('div');
+  constraintsRow.className = 'ai-constraints';
+  const lang = labeledInput('Sprache', 'de');
+  const tone = labeledInput('Ton', 'noir');
+  const length = labeledSelect('Länge', ['short', 'medium', 'long'], 'medium');
+  constraintsRow.append(lang.wrap, tone.wrap, length.wrap);
+  wrapper.appendChild(constraintsRow);
+
+  const entitySection = document.createElement('div');
+  entitySection.className = 'ai-section';
+  entitySection.innerHTML = '<h4>Name & Beschreibung</h4><p class="hint">Erzeugt Vorschläge für das aktuell ausgewählte Entity.</p>';
+  const entityControls = document.createElement('div');
+  entityControls.className = 'ai-controls';
+  const entityType = labeledSelect('Entity-Typ', ['room', 'item', 'object', 'npc', 'enemy'], currentEntityType());
+  const seedInput = labeledTextarea('Stichworte / Seed');
+  entityControls.append(entityType.wrap, seedInput.wrap);
+  const entityBtn = document.createElement('button');
+  entityBtn.className = 'primary';
+  entityBtn.textContent = 'Name + Beschreibung vorschlagen';
+  entityBtn.onclick = () => runAiRequest('entity', {
+    entityType: entityType.select.value,
+    seed: seedInput.area.value,
+    language: lang.input.value,
+    tone: tone.input.value,
+    length: length.select.value,
+  }, preview, applyBtn);
+  entitySection.append(entityControls, entityBtn);
+  wrapper.appendChild(entitySection);
+
+  const eventSection = document.createElement('div');
+  eventSection.className = 'ai-section';
+  eventSection.innerHTML = '<h4>Events aus Beschreibung</h4><p class="hint">Konvertiert eine Kurzbeschreibung in gültige Event-Ketten.</p>';
+  const eventControls = document.createElement('div');
+  eventControls.className = 'ai-controls';
+  const eventSeed = labeledTextarea('Was soll passieren?');
+  const eventOptions = eventTargets();
+  const eventTargetSelect = labeledSelect('Ziel', eventOptions.map(t => t.value), (eventOptions[0] || {}).value);
+  Array.from(eventTargetSelect.select.options).forEach((opt, idx) => {
+    opt.textContent = eventOptions[idx]?.label || opt.value;
+  });
+  if (!eventOptions.length) {
+    eventTargetSelect.select.disabled = true;
+    eventTargetSelect.select.title = 'Kein aktuelles Event-Ziel ausgewählt.';
+  }
+  eventControls.append(eventSeed.wrap, eventTargetSelect.wrap);
+  const eventBtn = document.createElement('button');
+  eventBtn.textContent = 'Events generieren';
+  eventBtn.disabled = !eventOptions.length;
+  eventBtn.onclick = () => runAiRequest('events', {
+    seed: eventSeed.area.value,
+    entityType: entityType.select.value,
+    language: lang.input.value,
+    tone: tone.input.value,
+    length: length.select.value,
+    eventTarget: eventTargetSelect.select.value,
+  }, preview, applyBtn);
+  eventSection.append(eventControls, eventBtn);
+  wrapper.appendChild(eventSection);
+
+  const plotSection = document.createElement('div');
+  plotSection.className = 'ai-section';
+  plotSection.innerHTML = '<h4>Plot-Ideen / Hooks</h4><p class="hint">Kurzer Logline + optionale Flags/Items/Räume.</p>';
+  const plotControls = document.createElement('div');
+  plotControls.className = 'ai-controls';
+  const plotSeed = labeledTextarea('Thema / Stimmung');
+  plotControls.append(plotSeed.wrap);
+  const plotBtn = document.createElement('button');
+  plotBtn.textContent = 'Plot-Idee holen';
+  plotBtn.onclick = () => runAiRequest('plot', {
+    seed: plotSeed.area.value,
+    language: lang.input.value,
+    tone: tone.input.value,
+    length: length.select.value,
+  }, preview, applyBtn);
+  plotSection.append(plotControls, plotBtn);
+  wrapper.appendChild(plotSection);
+
+  const preview = document.createElement('pre');
+  preview.className = 'ai-preview';
+  preview.textContent = 'Bereit. Sende eine Anfrage, um Vorschläge zu sehen.';
+
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'primary';
+  applyBtn.textContent = 'Apply';
+  applyBtn.disabled = true;
+  applyBtn.onclick = () => applyAiSuggestion(eventTargetSelect.select.value);
+
+  const previewActions = document.createElement('div');
+  previewActions.className = 'ai-preview-actions';
+  previewActions.append(preview, applyBtn);
+  wrapper.appendChild(previewActions);
+
+  openModal('AI Assist', wrapper);
+}
+
+function labeledInput(label, value = '') {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value;
+  wrap.append(lbl, input);
+  return { wrap, input };
+}
+
+function labeledSelect(label, values, selected) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const select = document.createElement('select');
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    if (v === selected) opt.selected = true;
+    select.appendChild(opt);
+  });
+  wrap.append(lbl, select);
+  return { wrap, select };
+}
+
+function labeledTextarea(label, value = '') {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const area = document.createElement('textarea');
+  area.value = value;
+  wrap.append(lbl, area);
+  return { wrap, area };
+}
+
+async function runAiRequest(mode, options, previewNode, applyBtn) {
+  try {
+    previewNode.textContent = 'Sende Anfrage...';
+    applyBtn.disabled = true;
+    const payload = buildAiPayload(mode, options);
+    const res = await Api.aiAssist(payload);
+    const result = res.result || res;
+    state.ai.lastResult = result;
+    state.ai.lastMode = mode;
+    state.ai.lastEntityType = options.entityType || currentEntityType();
+    if (payload.context?.existingIds) state.ai.lastExisting = payload.context.existingIds;
+    previewNode.textContent = JSON.stringify(result, null, 2);
+    applyBtn.disabled = false;
+  } catch (e) {
+    previewNode.textContent = 'Fehler: ' + e.message;
+    applyBtn.disabled = true;
+    toast('AI Assist Fehler: ' + e.message, 'error');
+  }
+}
+
+function buildAiPayload(mode, options) {
+  const entityType = options.entityType || (mode === 'entity' ? currentEntityType() : undefined);
+  const payload = {
+    mode,
+    entityType,
+    style: 'nrw-noir-darknet',
+    seed: options.seed || '',
+    context: {
+      worldTitle: state.data?.world?.title || state.currentAdventure?.id || '',
+      currentRoom: state.selection.roomId ? (state.data?.rooms || []).find(r => r.id === state.selection.roomId) : null,
+      existingIds: entityType ? existingIdsFor(entityType) : [],
+    },
+    constraints: {
+      language: options.language || 'de',
+      tone: options.tone || 'noir',
+      length: options.length || 'medium',
+    },
+  };
+  return payload;
+}
+
+function existingIdsFor(entityType) {
+  const map = { room: 'rooms', item: 'items', object: 'objects', npc: 'npcs', enemy: 'enemies' };
+  const key = map[entityType];
+  if (!key || !state.data) return [];
+  return (state.data[key] || []).map(e => e.id).filter(Boolean);
+}
+
+function currentEntityType() {
+  if (state.selection.view === 'room') return 'room';
+  if (state.selection.view === 'item') return 'item';
+  if (state.selection.view === 'object') return 'object';
+  if (state.selection.view === 'enemy') return 'enemy';
+  if (state.selection.view === 'npc') return 'npc';
+  return 'room';
+}
+
+function eventTargets() {
+  const targets = [];
+  if (state.selection.view === 'room') {
+    const room = getSelectedEntity('room');
+    if (room) {
+      targets.push({ value: 'room:on_enter', label: 'Raum · On Enter', apply: (events) => updateRoom(room, 'on_enter', events) });
+      targets.push({ value: 'room:on_first_enter', label: 'Raum · On First Enter', apply: (events) => updateRoom(room, 'on_first_enter', events) });
+    }
+  }
+  if (state.selection.view === 'item') {
+    const item = getSelectedEntity('item');
+    if (item) targets.push({ value: 'item:on_use', label: 'Item · On Use', apply: (events) => updateItem(item, 'on_use', events) });
+  }
+  if (state.selection.view === 'object') {
+    const obj = getSelectedEntity('object');
+    if (obj) {
+      targets.push({ value: 'object:inspect', label: 'Objekt · On Inspect', apply: (events) => updateObject(obj, 'inspect', events) });
+      targets.push({ value: 'object:use', label: 'Objekt · On Use', apply: (events) => updateObject(obj, 'use', events) });
+      targets.push({ value: 'object:on_locked_use', label: 'Objekt · On Locked Use', apply: (events) => updateObject(obj, 'on_locked_use', events) });
+    }
+  }
+  if (state.selection.view === 'enemy') {
+    const enemy = getSelectedEntity('enemy');
+    if (enemy) {
+      targets.push({ value: 'enemy:on_attack', label: 'Gegner · On Attack', apply: (events) => updateEnemy(enemy, 'on_attack', events) });
+      targets.push({ value: 'enemy:on_defeat', label: 'Gegner · On Defeat', apply: (events) => updateEnemy(enemy, 'on_defeat', events) });
+    }
+  }
+  return targets;
+}
+
+function getSelectedEntity(entityType) {
+  if (!state.data) return null;
+  const map = { room: { key: 'rooms', sel: 'roomId' }, item: { key: 'items', sel: 'itemId' }, object: { key: 'objects', sel: 'objectId' }, npc: { key: 'npcs', sel: 'npcId' }, enemy: { key: 'enemies', sel: 'enemyId' } };
+  const info = map[entityType];
+  if (!info) return null;
+  const id = state.selection[info.sel];
+  if (!id) return null;
+  return (state.data[info.key] || []).find(e => e.id === id) || null;
+}
+
+function applyAiSuggestion(targetKey) {
+  const result = state.ai.lastResult;
+  if (!result) {
+    toast('Kein Ergebnis zum Anwenden vorhanden.', 'error');
+    return;
+  }
+  if (state.ai.lastMode === 'entity') {
+    applyEntitySuggestion(result, state.ai.lastEntityType || currentEntityType());
+  } else if (state.ai.lastMode === 'events') {
+    applyEventSuggestion(result, targetKey);
+  } else if (state.ai.lastMode === 'plot') {
+    applyPlotSuggestion(result);
+  } else {
+    toast('Unbekannter Ergebnistyp', 'error');
+  }
+}
+
+function applyEntitySuggestion(result, entityType) {
+  const entity = getSelectedEntity(entityType);
+  if (!entity) {
+    toast('Kein passendes Entity ausgewählt, um den Vorschlag anzuwenden.', 'error');
+    return;
+  }
+  if (result.id_suggestion && !entity.id) { entity.id = result.id_suggestion; setDirty(true); }
+  if (result.name) {
+    if (entityType === 'room') updateRoom(entity, 'title', result.name);
+    else if (entityType === 'item') updateItem(entity, 'name', result.name);
+    else if (entityType === 'object') updateObject(entity, 'name', result.name);
+    else if (entityType === 'enemy') updateEnemy(entity, 'name', result.name);
+    else if (entityType === 'npc') { entity.name = result.name; setDirty(true); }
+  }
+  if (result.description) {
+    if (entityType === 'room') updateRoom(entity, 'description', result.description);
+    else if (entityType === 'item') updateItem(entity, 'description', result.description);
+    else if (entityType === 'object') updateObject(entity, 'description', result.description);
+    else if (entityType === 'enemy') updateEnemy(entity, 'description', result.description);
+    else if (entityType === 'npc') { entity.description = result.description; setDirty(true); }
+  }
+  renderEditor();
+  toast('Vorschlag übernommen.', 'success');
+}
+
+function applyEventSuggestion(result, targetKey) {
+  const events = result.events || result;
+  if (!Array.isArray(events)) {
+    toast('Events konnten nicht gelesen werden.', 'error');
+    return;
+  }
+  const targets = eventTargets();
+  const target = targets.find(t => t.value === targetKey) || targets[0];
+  if (!target) {
+    toast('Kein Event-Ziel für die aktuelle Auswahl gefunden.', 'error');
+    return;
+  }
+  target.apply(events);
+  renderEditor();
+  toast('Events übernommen: ' + target.label, 'success');
+}
+
+function applyPlotSuggestion(result) {
+  state.data.game = state.data.game || {};
+  if (result.logline) {
+    state.data.game.subtitle = result.logline;
+  }
+  if (Array.isArray(result.beats)) {
+    const beatsText = result.beats.map(b => '- ' + b).join('\n');
+    state.data.game.intro = [result.logline, beatsText].filter(Boolean).join('\n');
+  }
+  setDirty(true);
+  renderEditor();
+  toast('Plot-Hook in game.json übernommen.', 'success');
+}
+
 function setDirty(flag = true) {
   state.dirty = flag;
   const btn = document.getElementById('btn-save');
@@ -92,6 +431,10 @@ function init() {
     const url = `./index.html?adv=${state.currentAdventure.id}`;
     window.open(url, '_blank');
   });
+  if (aiButton) {
+    aiButton.addEventListener('click', openAiAssistModal);
+  }
+  initAiAssist();
   loadAdventures();
 }
 

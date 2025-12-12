@@ -1,6 +1,6 @@
 # NRW Noir Adventure Engine
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 
 ## Features des Adventure Builders
 - **Dashboard für Adventures:** Adventures auflisten, anlegen, bearbeiten, duplizieren und direkt aus dem Builder öffnen.
@@ -14,3 +14,10 @@
 - **Adventure-Tests im Browser:** Aktuelles Adventure mit einem Klick im Terminal-Modus öffnen, um Änderungen direkt zu prüfen.
 - **ASCII-Upload:** ASCII-Dateien hochladen und im Builder verwalten, damit Räume sofort passende Artworks erhalten.
 - **Neue Demo-Adventure:** "Schatten der Domruine" als gotisches Beispiel mit Krypta, Turm, NPC-Dialogen, Gegnern und Beute.
+- **Optionaler AI Assist:** Vorschläge für Namen, Beschreibungen, Event-Ketten und Plot-Hooks direkt im Builder erzeugen (via OpenAI und serverseitigem Proxy mit Feature Flag).
+
+## AI Assist konfigurieren
+
+- `.env` im Projekt-Root steuert die Verfügbarkeit (`DARKNET_AI_ENABLED=1`) und enthält den `OPENAI_API_KEY`.
+- Beispiel-Variablen liegen in `.env-sample` und können kopiert werden.
+- Ist das Feature deaktiviert, bleiben die Buttons im Builder ausgegraut und der API-Endpunkt liefert 403.
