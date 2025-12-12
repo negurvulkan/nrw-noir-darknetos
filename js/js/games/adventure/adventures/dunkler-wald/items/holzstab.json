@@ -1,8 +1,0 @@
-{
-  "id": "holzstab",
-  "name": "Knotenreicher Holzstab",
-  "description": "Ein stabiler Stab, der beim Navigieren durch das Unterholz hilft.",
-  "pickup": true,
-  "combine": {},
-  "on_use": []
-}
