@@ -55,7 +55,7 @@ function autoScaleBanner(lines) {
     .setProperty("--banner-font-size", size + "px");
 }
 
-const CONTENT_SCAN_URL = '/content-builder/api/scan.php';
+const CONTENT_SCAN_URL = './content-builder/api/scan.php';
 
 // Index laden & Filesystem aufbauen (Auto-Scan via scan.php)
 async function loadFileIndex() {
