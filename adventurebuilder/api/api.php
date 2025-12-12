@@ -89,6 +89,8 @@ function loadAdventure($id)
     $rooms = readJsonDirectory($dir . '/rooms');
     $items = readJsonDirectory($dir . '/items');
     $objects = readJsonDirectory($dir . '/objects');
+    $npcs = readJsonDirectory($dir . '/npcs');
+    $dialogs = readDialogDirectory($dir . '/dialogs');
     $asciiFiles = listFiles($dir . '/ascii');
 
     return [
@@ -99,6 +101,8 @@ function loadAdventure($id)
             'rooms' => $rooms,
             'items' => $items,
             'objects' => $objects,
+            'npcs' => $npcs,
+            'dialogs' => $dialogs,
         ],
         'ascii' => $asciiFiles,
     ];
@@ -115,6 +119,8 @@ function saveAdventure($id, $payload)
     persistCollection($dir . '/rooms', $payload['rooms'] ?? [], 'rooms');
     persistCollection($dir . '/items', $payload['items'] ?? [], 'items');
     persistCollection($dir . '/objects', $payload['objects'] ?? [], 'objects');
+    persistCollection($dir . '/npcs', $payload['npcs'] ?? [], 'npcs');
+    persistDialogs($dir . '/dialogs', $payload['dialogs'] ?? []);
 
     return ['status' => 'ok'];
 }
@@ -175,6 +181,8 @@ function createAdventure($payload)
     @mkdir($dir . '/rooms', 0777, true);
     @mkdir($dir . '/items', 0777, true);
     @mkdir($dir . '/objects', 0777, true);
+    @mkdir($dir . '/npcs', 0777, true);
+    @mkdir($dir . '/dialogs', 0777, true);
     @mkdir($dir . '/ascii', 0777, true);
 
     if (!empty($payload['source'])) {
@@ -215,6 +223,8 @@ function copyAdventure($sourceId, $targetId)
     copyDirectory($sourceDir . '/rooms', $targetDir . '/rooms');
     copyDirectory($sourceDir . '/items', $targetDir . '/items');
     copyDirectory($sourceDir . '/objects', $targetDir . '/objects');
+    copyDirectory($sourceDir . '/npcs', $targetDir . '/npcs');
+    copyDirectory($sourceDir . '/dialogs', $targetDir . '/dialogs');
     copyDirectory($sourceDir . '/ascii', $targetDir . '/ascii');
 }
 
@@ -254,6 +264,27 @@ function persistCollection($dir, $entries, $type)
     }
 }
 
+function persistDialogs($dir, $dialogs)
+{
+    if (!is_dir($dir)) mkdir($dir, 0777, true);
+    $ids = [];
+    foreach ($dialogs as $key => $dialog) {
+        $dialogData = is_array($dialog) ? $dialog : (array)$dialog;
+        $id = sanitizeId(is_string($key) ? $key : ($dialogData['npc'] ?? ''));
+        if (!$id) {
+            throw new Exception('Ungültige Dialog-ID');
+        }
+        $ids[] = $id;
+        writeJsonFile($dir . '/' . $id . '.json', $dialog);
+    }
+    foreach (glob($dir . '/*.json') as $existing) {
+        $basename = basename($existing, '.json');
+        if (!in_array($basename, $ids, true)) {
+            unlink($existing);
+        }
+    }
+}
+
 function readJsonDirectory($dir)
 {
     if (!is_dir($dir)) return [];
@@ -263,6 +294,20 @@ function readJsonDirectory($dir)
         if ($content) $data[] = $content;
     }
     return $data;
+}
+
+function readDialogDirectory($dir)
+{
+    if (!is_dir($dir)) return new stdClass();
+    $data = [];
+    foreach (glob($dir . '/*.json') as $file) {
+        $id = basename($file, '.json');
+        $content = readJsonFile($file);
+        if ($content) {
+            $data[$id] = $content;
+        }
+    }
+    return (object)$data;
 }
 
 function listFiles($dir)
