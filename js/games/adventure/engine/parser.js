@@ -11,6 +11,8 @@ const VERB_SYNONYMS = {
   push: ['drücke', 'druecke', 'schiebe', 'push'],
   pull: ['ziehe', 'pull'],
   attack: ['angriff', 'angreifen', 'attack', 'schlag', 'kämpfe', 'kaempfe'],
+  defend: ['verteidige', 'verteidigen', 'block', 'blocken', 'defend'],
+  flee: ['fliehe', 'fliehen', 'flucht', 'lauf weg', 'renne weg', 'escape', 'flee'],
   combine: ['kombiniere', 'combine'],
   talk: ['rede', 'rede mit', 'sprich', 'sprich mit', 'spreche', 'talk', 'dialog'],
   inventory: ['inventar', 'tasche', 'beutel', 'i', 'inv', 'rucksack'],

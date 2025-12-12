@@ -54,6 +54,12 @@ Mehrere Events in Reihe:
 | **transition**    | Spieler in anderen Raum teleportieren | `{ "type": "transition", "to": "villa_vorhof" }`                  |
 | **trigger_fight** | Kampf starten                         | `{ "type": "trigger_fight", "enemy": "geist" }`                   |
 
+## Gegnerdaten & Kampfsystem
+
+* Gegner liegen unter `adventures/<name>/enemies/*.json` und enthalten mindestens `id`, `name`, `description` sowie `stats` (hp/attack/defense).
+* Kämpfe unterstützen mehrere Aktionen: `attack`, `defend` (Schaden halbieren), `flee` (Fluchtchance, konfigurierbar über `behavior.fleeDifficulty`) und `use <item>` für Items mit `combat_effects`.
+* Gegner können optionale Event-Hooks besitzen: `on_attack` wird nach dem Angriff des Gegners aufgerufen, `on_defeat` nach dem Sieg des Spielers. Hier können weitere Events wie Loot, Flaggen oder ASCII-Ausgaben ausgeführt werden.
+
 ---
 
 # 🧠 **3. Ausführliche Beispiele**

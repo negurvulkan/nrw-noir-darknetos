@@ -15,7 +15,7 @@ import {
 
 const SAVE_PREFIX = 'darkadv_';
 
-const defaultStats = { hp: 12, attack: 2, defense: 1 };
+const defaultStats = { hp: 12, maxHp: 12, attack: 2, defense: 1 };
 
 const createEmptyCache = () => ({
   world: null,
@@ -34,6 +34,7 @@ const createEmptyState = () => ({
   stats: { ...defaultStats },
   inCombat: false,
   enemy: null,
+  combat: { defending: false, enemyStartHp: null },
   visited: {},
   lockedExits: {},
   npcFlags: {},
@@ -209,6 +210,7 @@ function saveState() {
       stats: state.stats,
       inCombat: state.inCombat,
       enemy: state.enemy,
+      combat: state.combat,
       visited: state.visited,
       lockedExits: state.lockedExits,
       npcFlags: state.npcFlags,
@@ -225,8 +227,17 @@ function loadStateFromSave() {
     const saved = JSON.parse(raw);
     state = createEmptyState();
     Object.assign(state, saved);
+    if (!state.stats) {
+      state.stats = { ...defaultStats };
+    }
+    if (!state.stats.maxHp) {
+      state.stats.maxHp = defaultStats.maxHp;
+    }
     if (!state.dialog) {
       state.dialog = { active: false, npcId: null, nodeId: null };
+    }
+    if (!state.combat) {
+      state.combat = { defending: false, enemyStartHp: null };
     }
     if (!state.npcFlags) {
       state.npcFlags = {};
@@ -355,6 +366,7 @@ function ctxForEvents() {
     showCurrentRoom: async (first = false) => showRoom(first),
     startCombat: async (enemyId) => startCombat(enemyId, state, ctxForEvents()),
     loadEnemy,
+    loadItem,
     startDialog: async (npcId, nodeId = null) => startDialogWithNpc(npcId, nodeId),
     endDialog: () => endDialog(),
     gotoDialogNode: async (nodeId) => gotoDialogNode(nodeId),
@@ -690,6 +702,7 @@ function printHelp() {
     '- Bewegung: geh nord/ost/sued/west oder n/s/o/w',
     '- nimm <item>, untersuche <objekt>',
     '- benutze <objekt|item>',
+    '- im Kampf: attack, defend, flee, use <item>',
     '- sprich mit <person>',
     '- kombiniere <item> mit <anderes>',
     '- inventar, hilfe',
