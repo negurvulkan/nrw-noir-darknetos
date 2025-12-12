@@ -48,10 +48,20 @@ export function ensureAdventureUI() {
 export function renderStatus(state) {
   if (!advStatusEl || !state) return;
   const hp = state.stats?.hp ?? '-';
+  const maxHp = state.stats?.maxHp ?? null;
   const atk = state.stats?.attack ?? '-';
   const def = state.stats?.defense ?? '-';
+  const hpText = maxHp ? `${Math.max(hp, 0)}/${maxHp}` : hp;
+  const guard = state.combat?.defending ? ' (Verteidigung)' : '';
+  let status = `[${state.location}]  HP ${hpText}  ⚔ ${atk}  🛡 ${def}${guard}`;
+  if (state.inCombat && state.enemy) {
+    const enemyHp = Math.max(state.enemy.stats?.hp ?? 0, 0);
+    const enemyDef = state.enemy.stats?.defense ?? '-';
+    const enemyAtk = state.enemy.stats?.attack ?? '-';
+    status += `  | Gegner: ${state.enemy.name} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
+  }
 
-  advStatusEl.textContent = `[${state.location}]  HP ${hp}  ⚔ ${atk}  🛡 ${def}`;
+  advStatusEl.textContent = status;
 }
 
 export function renderRoomContent(lines = []) {
