@@ -157,12 +157,29 @@ async function enemyAttack(enemy, state, ctx, combatMeta) {
 async function handleVictory(enemy, state, ctx) {
   advLog([`${enemy.name} wurde besiegt!`]);
   const drops = enemy.drops || [];
-  drops.forEach((drop) => {
-    if (!state.inventory.includes(drop)) {
-      state.inventory.push(drop);
-      advLog([`Du erhältst ${drop}.`]);
+  for (const drop of drops) {
+    if (!drop) continue;
+    if (!ctx.loadItem) {
+      if (!state.inventory.includes(drop)) {
+        state.inventory.push(drop);
+        advLog([`Du erhältst ${drop}.`]);
+      }
+      // eslint-disable-next-line no-continue
+      continue;
     }
-  });
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const item = await ctx.loadItem(drop);
+      const itemId = item.id || drop;
+      if (!state.inventory.includes(itemId)) {
+        state.inventory.push(itemId);
+        advLog([`Du erhältst ${item.name || itemId}.`]);
+      }
+    } catch (err) {
+      advLog([`Beute konnte nicht geladen werden (${drop}).`]);
+    }
+  }
 
   if (Array.isArray(enemy.on_defeat) && enemy.on_defeat.length) {
     await runEvents(enemy.on_defeat, state, ctx);

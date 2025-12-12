@@ -543,15 +543,12 @@ function renderEnemyEditor() {
   behaviorGrid.appendChild(field('Flucht-Wahrscheinlichkeit', 'number', enemy.behavior?.fleeDifficulty ?? '', (v) => updateEnemyBehavior(enemy, 'fleeDifficulty', v)));
   card.appendChild(behaviorGrid);
 
-  const dropsField = document.createElement('div');
-  dropsField.className = 'field';
-  dropsField.innerHTML = '<label>Beute (kommagetrennt)</label>';
-  const dropsInput = document.createElement('input');
-  dropsInput.type = 'text';
-  dropsInput.value = (enemy.drops || []).join(', ');
-  dropsInput.oninput = () => updateEnemy(enemy, 'drops', dropsInput.value.split(',').map(d => d.trim()).filter(Boolean));
-  dropsField.appendChild(dropsInput);
-  card.appendChild(dropsField);
+  card.appendChild(multiselectField(
+    'Beute (Items)',
+    state.data.items || [],
+    enemy.drops || [],
+    (vals) => updateEnemy(enemy, 'drops', vals)
+  ));
 
   card.appendChild(eventArea('On Attack', enemy.on_attack || [], (val) => updateEnemy(enemy, 'on_attack', val)));
   card.appendChild(eventArea('On Defeat', enemy.on_defeat || [], (val) => updateEnemy(enemy, 'on_defeat', val)));
@@ -1287,6 +1284,10 @@ function deleteItem(id) {
   state.data.rooms = (state.data.rooms || []).map(room => ({
     ...room,
     items: (room.items || []).filter(itemId => itemId !== id)
+  }));
+  state.data.enemies = (state.data.enemies || []).map(enemy => ({
+    ...enemy,
+    drops: (enemy.drops || []).filter(dropId => dropId !== id),
   }));
   setDirty(true);
   state.selection = defaultSelection({ view: 'world' });
