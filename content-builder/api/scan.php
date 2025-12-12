@@ -2,7 +2,7 @@
 // scan.php – rekursiver Scanner für content/*.json
 header("Content-Type: application/json; charset=utf-8");
 
-$base = __DIR__ . "/content";
+$base = __DIR__ . "/../../content";
 
 function scanDirRecursive($dir, $relBase = "") {
     $result = [];

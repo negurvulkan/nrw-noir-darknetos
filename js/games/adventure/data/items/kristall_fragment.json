@@ -1,8 +1,0 @@
-{
-  "id": "kristall_fragment",
-  "name": "Kristall-Fragment",
-  "description": "Ein schimmerndes Fragment, das in schwachem Licht leuchtet.",
-  "pickup": true,
-  "combine": {},
-  "on_use": []
-}
