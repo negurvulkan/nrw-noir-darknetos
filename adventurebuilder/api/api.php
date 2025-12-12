@@ -89,6 +89,7 @@ function loadAdventure($id)
     $rooms = readJsonDirectory($dir . '/rooms');
     $items = readJsonDirectory($dir . '/items');
     $objects = readJsonDirectory($dir . '/objects');
+    $enemies = readJsonDirectory($dir . '/enemies');
     $npcs = readJsonDirectory($dir . '/npcs');
     $dialogs = readDialogDirectory($dir . '/dialogs');
     $asciiFiles = listFiles($dir . '/ascii');
@@ -101,6 +102,7 @@ function loadAdventure($id)
             'rooms' => $rooms,
             'items' => $items,
             'objects' => $objects,
+            'enemies' => $enemies,
             'npcs' => $npcs,
             'dialogs' => $dialogs,
         ],
@@ -119,6 +121,7 @@ function saveAdventure($id, $payload)
     persistCollection($dir . '/rooms', $payload['rooms'] ?? [], 'rooms');
     persistCollection($dir . '/items', $payload['items'] ?? [], 'items');
     persistCollection($dir . '/objects', $payload['objects'] ?? [], 'objects');
+    persistCollection($dir . '/enemies', $payload['enemies'] ?? [], 'enemies');
     persistCollection($dir . '/npcs', $payload['npcs'] ?? [], 'npcs');
     persistDialogs($dir . '/dialogs', $payload['dialogs'] ?? []);
 
@@ -181,6 +184,7 @@ function createAdventure($payload)
     @mkdir($dir . '/rooms', 0777, true);
     @mkdir($dir . '/items', 0777, true);
     @mkdir($dir . '/objects', 0777, true);
+    @mkdir($dir . '/enemies', 0777, true);
     @mkdir($dir . '/npcs', 0777, true);
     @mkdir($dir . '/dialogs', 0777, true);
     @mkdir($dir . '/ascii', 0777, true);
@@ -223,6 +227,7 @@ function copyAdventure($sourceId, $targetId)
     copyDirectory($sourceDir . '/rooms', $targetDir . '/rooms');
     copyDirectory($sourceDir . '/items', $targetDir . '/items');
     copyDirectory($sourceDir . '/objects', $targetDir . '/objects');
+    copyDirectory($sourceDir . '/enemies', $targetDir . '/enemies');
     copyDirectory($sourceDir . '/npcs', $targetDir . '/npcs');
     copyDirectory($sourceDir . '/dialogs', $targetDir . '/dialogs');
     copyDirectory($sourceDir . '/ascii', $targetDir . '/ascii');
