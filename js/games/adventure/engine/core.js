@@ -17,6 +17,10 @@ const SAVE_PREFIX = 'darkadv_';
 
 const defaultStats = { hp: 12, maxHp: 12, attack: 2, defense: 1 };
 
+const DEBUG_LOG_LIMIT = 200;
+let debugLogging = false;
+const debugLogEntries = [];
+
 const createEmptyCache = () => ({
   world: null,
   rooms: {},
@@ -45,6 +49,83 @@ let cache = createEmptyCache();
 let state = createEmptyState();
 let adventureActive = false;
 let activeAdventureId = null;
+
+function formatTimestamp() {
+  return new Date().toISOString();
+}
+
+function formatDebugEntry(entry) {
+  const prefix = `[ADV DEBUG ${entry.timestamp}]`;
+  if (entry.type === 'input') {
+    return `${prefix} Eingabe: ${entry.payload}`;
+  }
+  if (entry.type === 'event') {
+    const info = entry.payload?.type || 'unbekanntes Event';
+    return `${prefix} Event: ${info}`;
+  }
+  return `${prefix} ${entry.type}`;
+}
+
+function pushDebugEntry(type, payload) {
+  const entry = { timestamp: formatTimestamp(), type, payload };
+  debugLogEntries.push(entry);
+  if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
+    debugLogEntries.shift();
+  }
+  if (debugLogging) {
+    const formatted = formatDebugEntry(entry);
+    if (typeof printLines === 'function') {
+      printLines([formatted], 'dim');
+    } else {
+      // eslint-disable-next-line no-console
+      console.debug(formatted);
+    }
+  }
+  return entry;
+}
+
+function logInputForDebug(text) {
+  if (!debugLogging) return;
+  pushDebugEntry('input', text);
+}
+
+function logEventForDebug(event) {
+  if (!debugLogging) return;
+  pushDebugEntry('event', event);
+}
+
+function setDebugLogging(enabled) {
+  debugLogging = !!enabled;
+  const status = debugLogging ? 'aktiviert' : 'deaktiviert';
+  const lines = [`Adventure-Debug-Logging ${status}.`];
+  if (debugLogging) {
+    lines.push('Eingaben und Eventketten werden mit Zeitstempel protokolliert.');
+  }
+  lines.push('');
+  if (typeof printLines === 'function') {
+    printLines(lines, 'dim');
+  }
+  return debugLogging;
+}
+
+function printDebugLog(limit = 20) {
+  const entries = debugLogEntries.slice(-limit);
+  const lines = ['Adventure Debug-Log:', '--------------------'];
+  if (!entries.length) {
+    lines.push('Keine Einträge vorhanden.');
+  } else {
+    entries.forEach((entry) => {
+      lines.push(formatDebugEntry(entry));
+    });
+  }
+  lines.push('');
+  if (typeof printLines === 'function') {
+    printLines(lines, 'dim');
+  } else {
+    // eslint-disable-next-line no-console
+    console.debug(lines.join('\n'));
+  }
+}
 
 function isActive() {
   return adventureActive;
@@ -370,7 +451,8 @@ function ctxForEvents() {
     startDialog: async (npcId, nodeId = null) => startDialogWithNpc(npcId, nodeId),
     endDialog: () => endDialog(),
     gotoDialogNode: async (nodeId) => gotoDialogNode(nodeId),
-    showDialogNode: async () => showDialogNode()
+    showDialogNode: async () => showDialogNode(),
+    logDebugEvent: (event) => logEventForDebug(event)
   };
 }
 
@@ -764,6 +846,7 @@ export const adventure = {
     await adventure.start(adventureId);
   },
   async handleInput(text) {
+    logInputForDebug(text);
     if (state.dialog?.active) {
       const trimmed = (text || '').trim();
       const normalized = normalizeId(trimmed);
@@ -803,6 +886,10 @@ export const adventure = {
   getDataRoot,
   getCurrentAdventure,
   isActive,
+  isDebugLoggingEnabled: () => debugLogging,
+  setDebugLogging,
+  printDebugLog,
+  getDebugLog: () => [...debugLogEntries],
   exit: () => {
     deactivate();
     clearAdventureUI();

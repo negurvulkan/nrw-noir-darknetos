@@ -28,6 +28,8 @@ function printCommandHelp() {
     'adv continue [name] - Letzten Spielstand laden',
     'adv list            - Liste aller Adventures',
     'adv reset [name]    - Spielstand zurücksetzen',
+    'adv debug on|off    - Adventure-Debug-Log aktivieren/deaktivieren',
+    'adv debug show      - Letzte Debug-Einträge anzeigen',
     'adv exit            - Adventure beenden',
     'adv help            - Diese Hilfe',
     'Während des Adventures werden Eingaben direkt interpretiert.'
@@ -81,6 +83,25 @@ async function handleAdvCommand(args = []) {
     case 'reset':
       await adventure.reset(adventureId);
       break;
+    case 'debug': {
+      const mode = (args[1] || '').toLowerCase();
+      if (mode === 'on') {
+        adventure.setDebugLogging(true);
+      } else if (mode === 'off') {
+        adventure.setDebugLogging(false);
+      } else if (mode === 'show') {
+        adventure.printDebugLog();
+      } else {
+        printLines([
+          'Debug-Modus für Adventure-Eingaben:',
+          '  adv debug on   - Logging aktivieren',
+          '  adv debug off  - Logging deaktivieren',
+          '  adv debug show - Letzte 20 Einträge anzeigen',
+          ''
+        ], 'dim');
+      }
+      break;
+    }
     case 'exit':
     case 'quit':
       adventure.exit();
