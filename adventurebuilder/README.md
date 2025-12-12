@@ -1,6 +1,6 @@
 # NRW Noir Adventure Engine
 
-**Version:** 1.5.1
+**Version:** 1.6.0
 
 ## Features des Adventure Builders
 - **Dashboard für Adventures:** Adventures auflisten, anlegen, bearbeiten, duplizieren und direkt aus dem Builder öffnen.
@@ -8,6 +8,7 @@
 - **Dialog- und NPC-Tools:** NPC-Sammlungen automatisch bereitstellen, Dialogzustände initialisieren und Dialoge mit Karten-Visualisierung bearbeiten.
 - **NPC- und Dialog-API:** NPC-Daten und Dialogbäume werden beim Laden und Speichern durch die API berücksichtigt.
 - **Enemy-Management:** Gegner können im Builder angelegt, editiert und mit ASCII-Art, Stats, Drops sowie Event-Ketten versehen werden.
+- **Feingranulare Gegner-Hooks:** On Attack/Hit/Miss/Defeat können als Eventketten im Enemy-Editor gepflegt werden (Blockly-UI).
 - **Gegenstandsbasierte Beute:** Gegner-Drops wählen jetzt reguläre Items aus der Adventure-Itemliste und landen als vollwertige Inventarobjekte.
 - **Kampf-taugliche Items:** Items lassen sich mit Angriffs- und Verteidigungswerten versehen und im Kampf als Waffen einsetzen.
 - **Event-Block-Editor:** Blockly-basierter Editor zum visuellen Erstellen der Eventketten, die in den Adventures ausgeführt werden.
