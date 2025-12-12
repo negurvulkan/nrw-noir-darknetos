@@ -1,0 +1,15 @@
+{
+  "id": "haupthalle",
+  "title": "Haupthalle der Ruine",
+  "ascii": { "file": "ascii/halle.txt", "fontSize": 6 },
+  "description": "Zersplitterte Buntglasfenster werfen bleiche Farben über Steinplatten. Bögen führen nach Norden in die Bibliothek, nach Osten zur Turmtreppe und nach Süden in die Krypta.",
+  "exits": { "nord": "bibliothek", "ost": "turm_treppe", "sued": "krypta_vorraum", "west": "innenhof" },
+  "objects": [],
+  "items": [],
+  "enemies": [],
+  "npcs": ["chronistin"],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Ein Orgelton hallt nach, obwohl niemand spielt." }
+  ]
+}

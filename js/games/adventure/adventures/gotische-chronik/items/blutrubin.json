@@ -1,0 +1,10 @@
+{
+  "id": "blutrubin",
+  "name": "Bluttrunkener Rubin",
+  "description": "Der Edelstein pulsiert, als würde ein Herz darin schlagen.",
+  "pickup": true,
+  "combine": {},
+  "on_use": [
+    { "type": "message", "text": "Als du den Rubin hältst, hallen entfernte Gesänge in der Krypta wider." }
+  ]
+}

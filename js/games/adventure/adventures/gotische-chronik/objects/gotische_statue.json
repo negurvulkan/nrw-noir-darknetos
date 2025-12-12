@@ -1,0 +1,13 @@
+{
+  "id": "gotische_statue",
+  "name": "Gotische Statue",
+  "description": "Eine geflügelte Steinfigur, deren Augen aus schwarzem Glas bestehen.",
+  "inspect": [
+    { "type": "message", "text": "Der Blick der Statue scheint auf die Krypta zu weisen." }
+  ],
+  "use": [
+    { "type": "message", "text": "Als du die Statue berührst, klimpert etwas Metallisches im Hof." }
+  ],
+  "locked": false,
+  "on_locked_use": []
+}

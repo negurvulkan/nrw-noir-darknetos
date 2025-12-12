@@ -1,0 +1,10 @@
+{
+  "id": "schwarze_kerze",
+  "name": "Schwarze Kerze",
+  "description": "Eine rußige Kerze, die kaum Licht, aber viel Rauch spendet.",
+  "pickup": true,
+  "combine": {},
+  "on_use": [
+    { "type": "message", "text": "Die Flamme flackert grünlich auf und wirft lange Schatten." }
+  ]
+}

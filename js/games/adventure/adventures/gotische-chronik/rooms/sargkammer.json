@@ -1,0 +1,15 @@
+{
+  "id": "sargkammer",
+  "title": "Sargkammer",
+  "description": "In der Mitte steht ein aufgeschlagener Steinsarg. Dunkles Feuer leckt an seinen Rändern.",
+  "exits": { "west": "krypta_vorraum" },
+  "objects": ["altar_der_nacht"],
+  "items": [],
+  "enemies": ["schattenritter"],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "ascii", "file": "ascii/ritter.txt", "fontSize": 5 },
+    { "type": "message", "text": "Der Schattenritter erhebt sich aus dem Sarg und zielt seine Klinge auf dich." }
+  ]
+}

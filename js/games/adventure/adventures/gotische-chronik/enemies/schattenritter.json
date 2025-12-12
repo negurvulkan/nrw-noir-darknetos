@@ -1,0 +1,15 @@
+{
+  "id": "schattenritter",
+  "name": "Schattenritter",
+  "ascii": { "file": "ascii/ritter.txt", "fontSize": 5 },
+  "description": "Ein gepanzerter Ritter, dessen Helm von blassem Feuer erfüllt ist.",
+  "stats": { "hp": 16, "attack": 4, "defense": 3 },
+  "behavior": { "fleeDifficulty": 0.8 },
+  "drops": ["silberner_schluessel"],
+  "on_attack": [
+    { "type": "message", "text": "Der Schattenritter hebt das Schwert, und der Hall verstummt." }
+  ],
+  "on_defeat": [
+    { "type": "message", "text": "Das Feuer im Helm erlischt. Ein silberner Schlüssel fällt klirrend zu Boden." }
+  ]
+}

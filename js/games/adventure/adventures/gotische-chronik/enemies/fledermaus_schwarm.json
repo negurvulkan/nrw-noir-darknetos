@@ -1,0 +1,14 @@
+{
+  "id": "fledermaus_schwarm",
+  "name": "Fledermausschwarm",
+  "description": "Dutzende flatternde Schatten, die nach deinem Blut gieren.",
+  "stats": { "hp": 8, "attack": 2, "defense": 0 },
+  "behavior": { "fleeDifficulty": 0.3 },
+  "drops": [],
+  "on_attack": [
+    { "type": "message", "text": "Die Flügel schneiden kalte Linien in die Luft." }
+  ],
+  "on_defeat": [
+    { "type": "message", "text": "Die Tiere zerstieben und lassen nur Federn zurück." }
+  ]
+}

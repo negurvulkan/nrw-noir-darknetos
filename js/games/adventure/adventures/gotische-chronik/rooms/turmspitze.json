@@ -1,0 +1,14 @@
+{
+  "id": "turmspitze",
+  "title": "Turmspitze",
+  "description": "Wind pfeift durch zerschlagene Zinnen. Unter dir liegt die Stadt wie eine Sammlung erloschener Kerzen.",
+  "exits": { "unten": "turm_treppe" },
+  "objects": [],
+  "items": ["geweihter_dolch"],
+  "enemies": [],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Ein letzter Glockenschlag erklingt, als hättest du den Fluch gebrochen." }
+  ]
+}

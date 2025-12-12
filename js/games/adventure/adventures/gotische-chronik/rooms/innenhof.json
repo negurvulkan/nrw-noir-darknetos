@@ -1,0 +1,14 @@
+{
+  "id": "innenhof",
+  "title": "Schattiger Innenhof",
+  "description": "Zwischen zerbrochenen Pfeilern liegt ein Brunnen voller schwarzer Rosen. Pfade führen nach Westen zurück, nach Osten in die Halle und nach Süden zur Krypta.",
+  "exits": { "west": "verwittertes_tor", "ost": "haupthalle", "sued": "krypta_vorraum" },
+  "objects": ["gotische_statue"],
+  "items": [],
+  "enemies": ["fledermaus_schwarm"],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Der Brunnen spiegelt dein Gesicht verzerrt in blutigem Wasser." }
+  ]
+}

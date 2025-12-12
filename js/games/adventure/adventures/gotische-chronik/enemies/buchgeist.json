@@ -1,0 +1,13 @@
+{
+  "id": "buchgeist",
+  "name": "Buchgeist",
+  "description": "Eine literarische Manifestation, die dich mit Pergamentfetzen attackiert.",
+  "stats": { "hp": 10, "attack": 3, "defense": 1 },
+  "drops": ["staubige_seite"],
+  "on_attack": [
+    { "type": "message", "text": "Die Seiten rascheln und schneiden wie Messer." }
+  ],
+  "on_defeat": [
+    { "type": "message", "text": "Ein letzter Satz verblasst in der Luft, als der Geist vergeht." }
+  ]
+}

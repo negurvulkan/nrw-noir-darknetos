@@ -1,0 +1,11 @@
+{
+  "id": "geweihter_dolch",
+  "name": "Geweihter Dolch",
+  "description": "Die Klinge trägt geweihte Runen und ist überraschend schwer.",
+  "pickup": true,
+  "weapon": { "attack": 5, "defense": 1, "consume": false },
+  "combine": {},
+  "on_use": [
+    { "type": "message", "text": "Du lässt den Dolch durch die Luft schneiden – ein silbriger Bogen folgt der Klinge." }
+  ]
+}

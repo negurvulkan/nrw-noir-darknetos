@@ -1,0 +1,15 @@
+{
+  "id": "verwittertes_tor",
+  "title": "Verwittertes Tor",
+  "ascii": { "file": "ascii/tor.txt", "fontSize": 6 },
+  "description": "Vor dir erhebt sich das zerschlagene Portal der Domruine. Dahinter liegt der vom Nebel verschluckte Innenhof.",
+  "exits": { "ost": "innenhof" },
+  "objects": ["verziertes_wappen"],
+  "items": ["schwarze_kerze"],
+  "enemies": [],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Ein Krähenruf hallt aus der Ferne, als würdest du willkommen geheißen." }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "verfluchtes_amulett",
+  "name": "Verfluchtes Amulett",
+  "description": "Ein kalter Anhänger mit eingefasstem Onyx, der deinen Puls beruhigt.",
+  "pickup": true,
+  "combine": {},
+  "combat_effects": {
+    "buff": { "defense": 2 },
+    "consume": false
+  },
+  "on_use": [
+    { "type": "message", "text": "Ein dunkler Schleier legt sich über deine Haut, doch die Angst weicht." }
+  ]
+}

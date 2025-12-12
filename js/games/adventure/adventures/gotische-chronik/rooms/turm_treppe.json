@@ -1,0 +1,15 @@
+{
+  "id": "turm_treppe",
+  "title": "Gewundene Turmtreppe",
+  "description": "Eine enge Wendeltreppe führt in die Höhe. Ein versiegeltes Tor blockiert den Aufstieg nach oben.",
+  "exits": { "west": "haupthalle", "oben": "turmspitze" },
+  "objects": ["turmtor"],
+  "items": [],
+  "enemies": [],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "lock_exit", "room": "turm_treppe", "direction": "oben" },
+    { "type": "message", "text": "Das Schloss des Turmtors ächzt, als würdest du es provozieren." }
+  ]
+}
