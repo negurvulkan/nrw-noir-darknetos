@@ -1,0 +1,10 @@
+{
+  "id": "staubige_seite",
+  "name": "Staubige Buchseite",
+  "description": "Eine herausgerissene Seite mit einem Fragment eines Schutzzaubers.",
+  "pickup": true,
+  "combine": {},
+  "on_use": [
+    { "type": "message", "text": "Die Seite raschelt wie eine Stimme: \"Folge dem Gesang unter dem Stein.\"" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "staubiges_ritualbuch",
+  "name": "Staubiges Ritualbuch",
+  "description": "Knochenfarbene Seiten voll kyrillischer Beschwörungen und Randnotizen.",
+  "pickup": true,
+  "combine": {},
+  "on_use": [
+    { "type": "message", "text": "Zwischen den Zeilen findest du Hinweise auf eine geweihte Klinge." }
+  ]
+}

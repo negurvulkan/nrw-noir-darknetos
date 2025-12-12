@@ -1,0 +1,13 @@
+{
+  "id": "verziertes_wappen",
+  "name": "Verziertes Wappen",
+  "description": "Ein gesprungener Schild mit dem Relief einer Rose und eines Raben.",
+  "inspect": [
+    { "type": "message", "text": "Zwischen den Rissen glimmt schwach silbernes Licht." }
+  ],
+  "use": [
+    { "type": "message", "text": "Du fährst die Gravur nach. Der Stein fühlt sich warm an." }
+  ],
+  "locked": false,
+  "on_locked_use": []
+}

@@ -1,0 +1,25 @@
+{
+  "id": "altar_der_nacht",
+  "name": "Altar der Nacht",
+  "description": "Ein Opferstein, bedeckt von Wachsresten und vertrockneten Rosenblättern.",
+  "inspect": [
+    { "type": "message", "text": "Kerzenreste deuten darauf hin, dass hier Rituale abgehalten werden." }
+  ],
+  "use": [
+    {
+      "type": "flag_if",
+      "key": "altar_geweiht",
+      "equals": true,
+      "then": [
+        { "type": "message", "text": "Der Altar glimmt nur noch schwach – seine Macht ist aufgebraucht." }
+      ],
+      "else": [
+        { "type": "message", "text": "Du stellst die schwarze Kerze ab. Die Flamme färbt den Stein purpur." },
+        { "type": "add_item", "id": "blutrubin" },
+        { "type": "flag_set", "key": "altar_geweiht", "value": true }
+      ]
+    }
+  ],
+  "locked": false,
+  "on_locked_use": []
+}

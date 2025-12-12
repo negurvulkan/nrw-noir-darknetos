@@ -1,0 +1,10 @@
+{
+  "startRoom": "verwittertes_tor",
+  "globalFlags": {},
+  "defaultFontSize": 6,
+  "messages": {
+    "unknownCommand": "Der Wind trägt deine Worte davon.",
+    "cannotGo": "Dorthin führt kein Weg durch die Schatten.",
+    "cannotTake": "Das lässt sich nicht einfach mitnehmen."
+  }
+}

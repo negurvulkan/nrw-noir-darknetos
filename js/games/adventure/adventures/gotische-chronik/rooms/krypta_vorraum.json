@@ -1,0 +1,14 @@
+{
+  "id": "krypta_vorraum",
+  "title": "Vorraum der Krypta",
+  "description": "Stufen führen hinab in kaltes, feuchtes Dunkel. An den Wänden brennen rußende Fackeln.",
+  "exits": { "nord": "haupthalle", "ost": "sargkammer", "west": "innenhof" },
+  "objects": [],
+  "items": [],
+  "enemies": ["knochenwache"],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Ein Kettenrasseln kündigt an, dass du hier nicht allein bist." }
+  ]
+}

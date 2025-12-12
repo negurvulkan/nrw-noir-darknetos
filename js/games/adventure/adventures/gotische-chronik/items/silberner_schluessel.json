@@ -1,0 +1,16 @@
+{
+  "id": "silberner_schluessel",
+  "name": "Silberner Turmschlüssel",
+  "description": "Der Schlüssel schimmert kalt und trägt das Relief einer Fledermaus.",
+  "pickup": true,
+  "combine": {
+    "turmtor": [
+      { "type": "message", "text": "Das Turmtor knarzt und gibt den Weg nach oben frei." },
+      { "type": "unlock_exit", "room": "turm_treppe", "direction": "oben" },
+      { "type": "flag_set", "key": "turm_geoeffnet", "value": true }
+    ]
+  },
+  "on_use": [
+    { "type": "message", "text": "Der Schlüssel fühlt sich eiskalt an, als würde er dich zum Turm drängen." }
+  ]
+}

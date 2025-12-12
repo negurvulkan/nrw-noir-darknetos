@@ -1,6 +1,6 @@
 # NRW Noir Adventure Engine
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 ## Features des Adventure Builders
 - **Dashboard für Adventures:** Adventures auflisten, anlegen, bearbeiten, duplizieren und direkt aus dem Builder öffnen.
@@ -13,3 +13,4 @@
 - **Event-Block-Editor:** Blockly-basierter Editor zum visuellen Erstellen der Eventketten, die in den Adventures ausgeführt werden.
 - **Adventure-Tests im Browser:** Aktuelles Adventure mit einem Klick im Terminal-Modus öffnen, um Änderungen direkt zu prüfen.
 - **ASCII-Upload:** ASCII-Dateien hochladen und im Builder verwalten, damit Räume sofort passende Artworks erhalten.
+- **Neue Demo-Adventure:** "Schatten der Domruine" als gotisches Beispiel mit Krypta, Turm, NPC-Dialogen, Gegnern und Beute.

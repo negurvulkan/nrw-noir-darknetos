@@ -1,0 +1,13 @@
+{
+  "id": "knochenwache",
+  "name": "Knochenwache",
+  "description": "Ein klirrendes Skelett in zerbrochener Rüstung, das still den Weg versperrt.",
+  "stats": { "hp": 12, "attack": 3, "defense": 2 },
+  "drops": ["verfluchtes_amulett"],
+  "on_attack": [
+    { "type": "message", "text": "Die Wache schleudert einen rostigen Schild auf dich." }
+  ],
+  "on_defeat": [
+    { "type": "message", "text": "Die Rüstung zerbricht, Knochen splittern und fallen zu Staub." }
+  ]
+}

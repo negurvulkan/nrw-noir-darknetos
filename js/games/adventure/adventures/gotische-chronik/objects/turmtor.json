@@ -1,0 +1,13 @@
+{
+  "id": "turmtor",
+  "name": "Versiegeltes Turmtor",
+  "description": "Ein schweres Tor mit schmiedeeisernen Dornen, das den Aufstieg blockiert.",
+  "inspect": [
+    { "type": "message", "text": "Im Schloss erkennst du das Symbol der Fledermaus – ein Schlüssel könnte passen." }
+  ],
+  "use": [
+    { "type": "message", "text": "Das Tor bleibt verschlossen. Vielleicht hilft der passende Schlüssel." }
+  ],
+  "locked": false,
+  "on_locked_use": []
+}

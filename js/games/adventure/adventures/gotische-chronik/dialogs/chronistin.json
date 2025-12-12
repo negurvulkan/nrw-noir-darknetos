@@ -1,0 +1,46 @@
+{
+  "start": "begruesung",
+  "nodes": {
+    "begruesung": {
+      "text": "Die Chronistin legt den Federkiel zur Seite. \"Du störst den letzten Eintrag der Domchronik.\"",
+      "choices": [
+        { "text": "Wer bist du?", "next": "vorstellung" },
+        { "text": "Wie breche ich den Fluch?", "next": "hinweis" },
+        {
+          "text": "Ich habe den Rubin, was nun?",
+          "next": "belohnung",
+          "requires": { "inventory": ["blutrubin"] },
+          "hidden_if": { "flag": { "key": "dolch_vergeben", "equals": true } }
+        },
+        { "text": "Lass mich weitergehen.", "next": "end" }
+      ]
+    },
+    "vorstellung": {
+      "text": "\"Ich schreibe die Namen derjenigen nieder, die es wagen, hier einzudringen. Wenige kehren um.\"",
+      "choices": [
+        { "text": "Und wie endet dein Bericht?", "next": "hinweis" },
+        { "text": "Ich gehe weiter.", "next": "end" }
+      ]
+    },
+    "hinweis": {
+      "text": "\"Der Fluch ruht auf dem Ritter in der Sargkammer. Entzünde die Nacht auf dem Altar und nimm, was sein Herz bewacht.\"",
+      "choices": [
+        { "text": "Danke für den Hinweis.", "next": "end" }
+      ]
+    },
+    "belohnung": {
+      "text": "\"Der Rubin? Dann hast du dem Altar den Respekt erwiesen. Hier – eine geweihte Klinge.\"",
+      "choices": [
+        {
+          "text": "Die Klinge annehmen",
+          "events": [
+            { "type": "add_item", "id": "geweihter_dolch" },
+            { "type": "flag_set", "key": "dolch_vergeben", "value": true },
+            { "type": "message", "text": "Die Chronistin lächelt kurz. \"Schreib das Ende selbst.\"" }
+          ],
+          "next": "end"
+        }
+      ]
+    }
+  }
+}

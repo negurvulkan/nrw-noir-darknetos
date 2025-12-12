@@ -1,0 +1,8 @@
+{
+  "id": "chronistin",
+  "name": "Chronistin der Nacht",
+  "description": "Eine Frau in schwarzer Kutte, die in ein vergilbtes Buch schreibt.",
+  "room": "haupthalle",
+  "dialog_start": "begruesung",
+  "flags": { "dolch_vergeben": false }
+}

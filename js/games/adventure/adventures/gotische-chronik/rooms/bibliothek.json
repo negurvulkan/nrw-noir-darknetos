@@ -1,0 +1,14 @@
+{
+  "id": "bibliothek",
+  "title": "Düstere Bibliothek",
+  "description": "Regale voller moosiger Bände stürzen halb ein. Ein kalter Luftzug flüstert durch offene Seiten.",
+  "exits": { "sued": "haupthalle", "ost": "turm_treppe" },
+  "objects": [],
+  "items": ["staubiges_ritualbuch"],
+  "enemies": ["buchgeist"],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": [
+    { "type": "message", "text": "Ein Buch klappt von selbst auf und zeigt ein Kapitel über geweihte Waffen." }
+  ]
+}
