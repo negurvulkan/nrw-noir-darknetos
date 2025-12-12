@@ -4,7 +4,7 @@
 
 header('Content-Type: application/json');
 
-$baseDir = __DIR__ . '/js/games/adventure/adventures';
+$baseDir = __DIR__ . '/../../js/games/adventure/adventures';
 $indexPath = $baseDir . '/index.json';
 $allowedActions = ['list_adventures', 'load_adventure', 'save_adventure', 'upload_ascii', 'create_adventure'];
 $action = $_GET['action'] ?? '';

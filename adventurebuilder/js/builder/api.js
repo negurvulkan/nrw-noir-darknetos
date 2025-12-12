@@ -1,4 +1,4 @@
-const BASE_URL = 'builder-api.php';
+const BASE_URL = '/content-builder/api/adventure.php';
 
 function handleResponse(res) {
   if (!res.ok) throw new Error('Serverfehler: ' + res.status);

@@ -1,0 +1,3 @@
+*.zip
+content-builder/storage/
+.DS_Store

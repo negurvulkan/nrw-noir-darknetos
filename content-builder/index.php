@@ -1,8 +1,8 @@
 <?php
-// builder.php – NRW Noir Darknetz JSON File Builder + API
+// content-builder/index.php – NRW Noir Darknetz JSON File Builder + API
 
 // === KONFIGURATION ===================================================
-$CONTENT_DIR = __DIR__ . '/content';  // Zielordner für JSON-Dateien
+$CONTENT_DIR = __DIR__ . '/../content';  // Zielordner für JSON-Dateien
 
 // Hilfsfunktionen
 function json_response($data, $status = 200) {
@@ -733,7 +733,7 @@ Freier Markdown-Text.
   }
 
   async function api(action, params = {}, method = "GET") {
-    let url = "builder.php?api=1&action=" + encodeURIComponent(action);
+    let url = "index.php?api=1&action=" + encodeURIComponent(action);
     const options = { method, headers: {} };
 
     if (method === "GET") {
