@@ -1,0 +1,7 @@
+{
+  "id": "torwaechter",
+  "name": "Der Torwächter",
+  "description": "Ein mürrischer Mann im dunklen Mantel bewacht das Tor.",
+  "room": "villa_vorhof",
+  "dialog_start": "intro"
+}

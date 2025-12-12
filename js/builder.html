@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NRW Noir Adventure Builder</title>
+  <link rel="stylesheet" href="css/builder.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        <div>
+          <div class="brand-title">NRW Noir</div>
+          <div class="brand-sub">Adventure Builder</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="btn-dashboard" class="ghost">Dashboard</button>
+        <button id="btn-test" class="ghost">Im Terminal testen</button>
+        <button id="btn-save" class="primary">Speichern</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" id="nav-panel">
+        <div class="panel-header">Navigation</div>
+        <div id="sidebar-content" class="sidebar-content"></div>
+      </aside>
+
+      <main class="workspace">
+        <div id="view-header" class="view-header"></div>
+        <div id="view" class="view"></div>
+      </main>
+
+      <aside class="sidepanel">
+        <div class="panel-header">Raumkarte</div>
+        <div id="map-view" class="map-view"></div>
+        <div class="panel-header">ASCII Vorschau</div>
+        <pre id="ascii-preview" class="ascii-preview">Wähle einen Raum oder eine ASCII-Datei.</pre>
+      </aside>
+    </div>
+  </div>
+
+  <div id="notifications" class="notifications"></div>
+
+  <template id="toast-template">
+    <div class="toast"></div>
+  </template>
+
+  <div id="modal" class="modal">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title">Block-Editor</h3>
+        <button id="modal-close" class="icon-button" aria-label="Schließen">×</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  <script type="module" src="js/builder/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "id": "nebellichtung",
+  "title": "Nebellichtung",
+  "description": "Eine kleine Lichtung liegt im Nebel. Fern schimmert das Dach einer alten Villa. Pfade führen nach Süden, Westen und Norden.",
+  "exits": { "sued": "waldpfad", "west": "verlassener_lagerplatz", "nord": "verkuemmertes_moor" },
+  "objects": [],
+  "items": ["runenstein"],
+  "enemies": [],
+  "on_enter": [],
+  "on_first_enter": []
+}

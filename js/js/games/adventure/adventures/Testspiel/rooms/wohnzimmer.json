@@ -1,0 +1,11 @@
+{
+    "id": "wohnzimmer",
+    "title": "wohnzimmer",
+    "description": "",
+    "ascii": "",
+    "items": [],
+    "objects": [],
+    "exits": [],
+    "on_enter": [],
+    "on_first_enter": []
+}

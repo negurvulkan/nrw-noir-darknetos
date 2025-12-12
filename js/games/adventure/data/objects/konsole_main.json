@@ -1,0 +1,9 @@
+{
+  "id": "konsole_main",
+  "name": "Konsole",
+  "description": "Ein flackerndes Terminal.",
+  "inspect": [],
+  "use": [],
+  "locked": false,
+  "on_locked_use": []
+}

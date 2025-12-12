@@ -1,0 +1,12 @@
+{
+  "id": "eingangshalle",
+  "title": "Eingangshalle",
+  "ascii": { "file": "ascii/eingang.txt", "fontSize": 6 },
+  "description": "Staub liegt in der Luft. Eine Tür führt nach Norden.",
+  "exits": { "nord": "flur" },
+  "objects": ["konsole_main"],
+  "items": ["schluesselkarte"],
+  "enemies": [],
+  "on_enter": [],
+  "on_first_enter": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "verrosteter_schluessel",
+  "name": "Verrosteter Schlüssel",
+  "description": "Der Schlüssel ist alt und schwer, als gehöre er zu einer großen Tür.",
+  "pickup": true,
+  "combine": {},
+  "on_use": []
+}

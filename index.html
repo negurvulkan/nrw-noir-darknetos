@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>NRW Noir Darknetz Terminal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #050308;
+      --text: #c563ff;          /* Lila statt Grün */
+      --text-dim: #7b4aa8;
+      --accent: #ff86ff;
+      --error: #ff4f9a;
+      --success: #a4ffda;
+	  --banner-font-size: 4px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Fira Code", "JetBrains Mono", Menlo, Consolas, monospace;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+    }
+
+    .terminal-wrapper {
+      max-width: 960px;
+      width: 100%;
+      padding: 16px;
+    }
+
+	.terminal {
+	  background: #020105;
+	  border: 1px solid #3a244d;
+	  box-shadow: 0 0 24px #000;
+	  border-radius: 8px;
+	  height: calc(100vh - 32px);
+	  padding: 12px;
+	  display: flex;
+	  flex-direction: column;
+	  overflow: hidden;
+	  position: relative;
+	}
+
+	.terminal-watermark {
+	  position: absolute;
+	  inset: 32px 8px 32px 8px;
+	  pointer-events: none;
+	  opacity: 0.04;
+	  font-size: calc(var(--banner-font-size) * 0.9);  /* NEU */
+	  line-height: 1.1;
+	  white-space: pre;
+	  color: var(--text);
+	  filter: blur(0.2px);
+	}
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .term-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff5f57;
+    }
+    .term-dot:nth-child(2) { background: #febc2e; }
+    .term-dot:nth-child(3) { background: #28c840; }
+
+    .term-title {
+      margin-left: 8px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+	.terminal-output {
+	  flex: 1;
+	  overflow-y: auto;
+	  font-size: 14px;
+	  line-height: 1.5;
+	  padding-right: 4px;
+	  white-space: pre-wrap;
+	  position: relative;
+	  z-index: 1;
+	}
+	  
+	.banner-small {
+	  font-size: var(--banner-font-size);   /* NEU */
+	  line-height: 1.05;
+	  white-space: pre;
+	}
+
+    .line {
+      margin: 0;
+    }
+
+    .prompt {
+      color: var(--accent);
+    }
+
+    .dim {
+      color: var(--text-dim);
+    }
+
+    .success {
+      color: var(--success);
+    }
+
+    .error {
+      color: var(--error);
+    }
+
+    .terminal-input-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 14px;
+    }
+
+    #prompt-label {
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    #cmd-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font: inherit;
+    }
+
+    #cmd-input::placeholder {
+      color: #4a335f;
+    }
+
+    /* kleiner Cursor-Effekt */
+    .cursor::after {
+      content: "█";
+      margin-left: 2px;
+      animation: blink 1s steps(1) infinite;
+    }
+
+	.adv-ui {
+	  border: 1px dashed #3a244d;
+	  border-radius: 4px;
+	  padding: 4px 6px;
+	  margin-bottom: 8px;
+	  font-size: 13px;
+	}
+
+	.adv-status {
+	  border-bottom: 1px dashed #3a244d;
+	  padding-bottom: 2px;
+	  margin-bottom: 4px;
+	  font-weight: 600;
+	  color: var(--accent);
+	  white-space: pre;
+	}
+
+	.adv-ascii {
+	  min-height: 6em;
+	  max-height: 16em;
+	  margin: 0;
+	  white-space: pre;
+	  font-family: "Fira Code", "JetBrains Mono", monospace;
+	  color: var(--text);
+	  opacity: 0.9;
+	}
+
+	.adv-room {
+	  border-top: 1px dashed #3a244d;
+	  border-bottom: 1px dashed #3a244d;
+	  padding: 4px 0;
+	  margin: 4px 0;
+	  white-space: pre-wrap;
+	}
+
+	.adv-log {
+	  padding-top: 2px;
+	  max-height: 10em;
+	  overflow-y: auto;
+	  font-size: 12px;
+	}
+
+	.adv-log .success { color: var(--success); }
+	.adv-log .error   { color: var(--error);   }
+
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    @media (max-width: 600px) {
+      .terminal {
+        height: calc(100vh - 24px);
+      }
+      .terminal-header { font-size: 10px; }
+      .terminal-output { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+<div class="terminal-wrapper">
+  <div class="terminal">
+    <div class="terminal-header">
+      <div class="term-dot"></div>
+      <div class="term-dot"></div>
+      <div class="term-dot"></div>
+      <div class="term-title">NRW NOIR DARKNET / darkshell v1.0</div>
+    </div>
+
+	<pre id="watermark" class="terminal-watermark"></pre>
+	  
+    <div id="output" class="terminal-output"></div>
+
+    <div class="terminal-input-row">
+      <span id="prompt-label">root@darknet-nrw-noir:~$</span>
+      <input id="cmd-input" type="text" autocomplete="off"
+             spellcheck="false"
+             placeholder="tippe 'help' für Befehle…" />
+    </div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/content.js"></script>
+<script src="js/terminal.js"></script>
+<script src="js/games.js"></script>
+<script src="js/minigames/tictactoe.js"></script>
+<script type="module" src="js/games/adventure/commands/adventure.js"></script>
+<script src="js/init.js"></script>
+
+</body>
+</html>

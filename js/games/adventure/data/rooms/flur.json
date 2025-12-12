@@ -1,0 +1,12 @@
+{
+  "id": "flur",
+  "title": "Dunkler Flur",
+  "ascii": { "file": "ascii/flur.txt", "fontSize": 6 },
+  "description": "Ein schmaler Flur führt weiter nach Osten und Süden.",
+  "exits": { "sued": "eingangshalle" },
+  "objects": [],
+  "items": [],
+  "enemies": ["shadow_beast"],
+  "on_enter": [],
+  "on_first_enter": []
+}

@@ -1,0 +1,15 @@
+{
+    "id": "oelflasche",
+    "name": "Ein Fläschchen mit Öl",
+    "description": "",
+    "pickup": true,
+    "combine": {
+        "oellampe": [
+            {
+                "action": "print",
+                "text": "Test-Event: Kombination hat funktioniert."
+            }
+        ]
+    },
+    "on_use": []
+}

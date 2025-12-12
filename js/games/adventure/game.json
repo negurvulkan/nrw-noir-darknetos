@@ -1,0 +1,6 @@
+{
+  "id": "adventure",
+  "title": "NRW Noir Adventure",
+  "dataPath": "data",
+  "worldFile": "world.json"
+}

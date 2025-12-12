@@ -1,0 +1,8 @@
+{
+  "id": "schluesselkarte",
+  "name": "Schlüsselkarte",
+  "description": "Eine alte Keycard.",
+  "pickup": true,
+  "combine": {},
+  "on_use": []
+}

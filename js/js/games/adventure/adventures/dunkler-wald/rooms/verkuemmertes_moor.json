@@ -1,0 +1,11 @@
+{
+  "id": "verkuemmertes_moor",
+  "title": "Verkümmerter Moorpfad",
+  "description": "Der Boden wird weich und gierig. Schilf raschelt im Wind. Im Norden ragt die dunkle Silhouette der Villa auf, im Westen liegt die Lichtung.",
+  "exits": { "west": "nebellichtung", "nord": "villa_vorhof" },
+  "objects": [],
+  "items": ["verrosteter_schluessel"],
+  "enemies": [],
+  "on_enter": [],
+  "on_first_enter": []
+}

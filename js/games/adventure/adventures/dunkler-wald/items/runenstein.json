@@ -1,0 +1,8 @@
+{
+  "id": "runenstein",
+  "name": "Leuchtender Runenstein",
+  "description": "Ein Stein mit schwach glimmenden Runen, der beruhigend in deiner Tasche pulsiert.",
+  "pickup": true,
+  "combine": {},
+  "on_use": []
+}

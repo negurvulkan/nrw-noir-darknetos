@@ -1,0 +1,9 @@
+{
+  "id": "shadow_beast",
+  "name": "Schattenbestie",
+  "ascii": { "file": "ascii/beast.txt", "fontSize": 5 },
+  "description": "Etwas bewegt sich im Dunkeln.",
+  "stats": { "hp": 12, "attack": 3, "defense": 1 },
+  "drops": ["kristall_fragment"],
+  "on_attack": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "oellampe",
+  "name": "Öllampe",
+  "description": "Eine kleine Öllampe, die genug Licht spendet, um den Nebel zu durchdringen.",
+  "pickup": true,
+  "combine": {},
+  "on_use": []
+}

@@ -1,0 +1,32 @@
+{
+    "id": "verostetestor",
+    "name": "verostetes Tor",
+    "description": "",
+    "locked": true,
+    "use": [
+        {
+            "type": "flag_if",
+            "key": "exit_villa_vorhof_nord_open",
+            "equals": true,
+            "then": [
+                {
+                    "type": "message",
+                    "text": "Mit einem Ächzen schwingt das Tor auf."
+                },
+                {
+                    "type": "unlock_exit",
+                    "room": "villa_vorhof",
+                    "direction": "nord"
+                }
+            ],
+            "else": [
+                {
+                    "type": "message",
+                    "text": "Es rührt sich keinen Millimeter. Irgendetwas fehlt noch."
+                }
+            ]
+        }
+    ],
+    "on_locked_use": [],
+    "inspect": []
+}

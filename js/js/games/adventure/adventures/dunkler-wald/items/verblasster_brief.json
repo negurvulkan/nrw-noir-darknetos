@@ -1,0 +1,8 @@
+{
+  "id": "verblasster_brief",
+  "name": "Verblasster Brief",
+  "description": "Ein Brief, dessen Tinte kaum zu lesen ist. Er bestätigt, dass du die Villa der alten Familie gefunden hast.",
+  "pickup": true,
+  "combine": {},
+  "on_use": []
+}

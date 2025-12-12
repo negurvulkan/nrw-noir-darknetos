@@ -1,0 +1,12 @@
+{
+  "adventures": [
+    {
+      "id": "adventure",
+      "title": "NRW Noir Adventure"
+    },
+    {
+      "id": "adventure/adventures/dunkler-wald",
+      "title": "Dunkler Wald zur alten Villa"
+    }
+  ]
+}
