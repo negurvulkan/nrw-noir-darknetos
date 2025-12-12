@@ -1,6 +1,6 @@
 # NRW Noir Adventure Engine
 
-**Version:** 1.5.0
+**Version:** 1.5.1
 
 ## Features des Adventure Builders
 - **Dashboard für Adventures:** Adventures auflisten, anlegen, bearbeiten, duplizieren und direkt aus dem Builder öffnen.
@@ -21,3 +21,4 @@
 - `.env` im Projekt-Root steuert die Verfügbarkeit (`DARKNET_AI_ENABLED=1`) und enthält den `OPENAI_API_KEY`.
 - Beispiel-Variablen liegen in `.env-sample` und können kopiert werden.
 - Ist das Feature deaktiviert, bleiben die Buttons im Builder ausgegraut und der API-Endpunkt liefert 403.
+- `OPENAI_MAX_OUTPUT_TOKENS` steuert die Begrenzung der OpenAI-Antwort (verwendet als `max_tokens` beim API-Call).

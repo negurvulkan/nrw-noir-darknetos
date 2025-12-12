@@ -224,7 +224,7 @@ function callOpenAi($apiKey, $model, $temperature, $maxOutputTokens, $prompt)
             ['role' => 'user', 'content' => $prompt],
         ],
         'temperature' => $temperature,
-        'max_output_tokens' => $maxOutputTokens,
+        'max_tokens' => $maxOutputTokens,
         'response_format' => ['type' => 'json_object'],
     ];
 
