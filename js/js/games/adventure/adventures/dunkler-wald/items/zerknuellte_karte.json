@@ -1,8 +1,0 @@
-{
-  "id": "zerknuellte_karte",
-  "name": "Zerknüllte Karte",
-  "description": "Ein hastig gezeichneter Plan, der den Weg zu einer Villa am Waldrand zeigt.",
-  "pickup": true,
-  "combine": {},
-  "on_use": []
-}
