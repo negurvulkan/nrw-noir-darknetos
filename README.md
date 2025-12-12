@@ -21,6 +21,7 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 
 - Adventures werden über `adv start` geladen; ASCII/Assets stammen aus den Ordnern unter `/js/games/adventure/adventures/`.
 - Spielstände (Adventure-Progress) werden lokal im Browser gespeichert (`localStorage`).
+- Mit `adv debug on` lässt sich ein Adventure-Debug-Log aktivieren, das Eingaben und ausgelöste Events in der Terminal-Sitzung protokolliert; `adv debug show` gibt die letzten Einträge aus.
 
 ## Endpunkte
 

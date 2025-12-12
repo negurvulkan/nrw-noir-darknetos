@@ -6,6 +6,9 @@ import { advLog } from './ui.js';
 
 export async function runEvents(events = [], state, ctx) {
   for (const event of events) {
+    if (ctx?.logDebugEvent) {
+      ctx.logDebugEvent(event);
+    }
     // eslint-disable-next-line no-await-in-loop
     await handleEvent(event, state, ctx);
   }
