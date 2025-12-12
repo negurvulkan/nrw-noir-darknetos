@@ -10,7 +10,7 @@ const state = {
   currentAdventure: null,
   data: null,
   dirty: false,
-  selection: { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' },
+  selection: defaultSelection(),
   asciiFiles: [],
   map: { scale: 1, x: 0, y: 0 },
   dialogMaps: {},
@@ -53,6 +53,21 @@ function openModal(title, contentNode, onOpen) {
   if (contentNode) modalBody.appendChild(contentNode);
   modalEl.classList.add('open');
   if (onOpen) window.setTimeout(onOpen, 0);
+}
+
+function defaultSelection(overrides = {}) {
+  return {
+    view: 'world',
+    roomId: null,
+    itemId: null,
+    objectId: null,
+    enemyId: null,
+    npcId: null,
+    dialogId: null,
+    dialogNodeId: null,
+    dialogMode: 'editor',
+    ...overrides,
+  };
 }
 
 function setDirty(flag = true) {
@@ -160,10 +175,11 @@ async function openAdventure(id) {
     const res = await Api.loadAdventure(id);
     state.currentAdventure = res.adventure || state.adventures.find(a => a.id === id) || { id };
     state.data = res.data || res;
+    state.data.enemies = state.data.enemies || [];
     ensureNpcCollection(state.data);
     ensureDialogState(state.data);
     state.asciiFiles = res.ascii || res.asciiFiles || [];
-    state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+    state.selection = defaultSelection();
     state.map = { scale: 1, x: 0, y: 0 };
     setDirty(false);
     renderEditor();
@@ -181,7 +197,7 @@ function renderSidebar() {
   const worldNav = document.createElement('div');
   worldNav.className = 'nav-item' + (state.selection.view === 'world' ? ' active' : '');
   worldNav.textContent = 'World & Game';
-  worldNav.onclick = () => { state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' }; renderEditor(); renderSidebar(); };
+  worldNav.onclick = () => { state.selection = defaultSelection({ view: 'world' }); renderEditor(); renderSidebar(); };
   sidebar.appendChild(worldNav);
 
   sidebar.appendChild(sectionTitle('Räume'));
@@ -191,7 +207,7 @@ function renderSidebar() {
     const item = document.createElement('div');
     item.className = 'nav-item' + (state.selection.roomId === room.id ? ' active' : '');
     item.textContent = room.title || room.id;
-    item.onclick = () => { state.selection = { view: 'room', roomId: room.id, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' }; renderEditor(); renderSidebar(); updateAsciiPreview(room.ascii); };
+    item.onclick = () => { state.selection = defaultSelection({ view: 'room', roomId: room.id }); renderEditor(); renderSidebar(); updateAsciiPreview(room.ascii); };
     roomList.appendChild(item);
   });
   const btnNewRoom = document.createElement('button');
@@ -208,7 +224,7 @@ function renderSidebar() {
     const row = document.createElement('div');
     row.className = 'nav-item' + (state.selection.itemId === item.id ? ' active' : '');
     row.textContent = item.name || item.id;
-    row.onclick = () => { state.selection = { view: 'item', itemId: item.id, roomId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' }; renderEditor(); renderSidebar(); };
+    row.onclick = () => { state.selection = defaultSelection({ view: 'item', itemId: item.id }); renderEditor(); renderSidebar(); };
     itemList.appendChild(row);
   });
   const btnNewItem = document.createElement('button');
@@ -225,7 +241,7 @@ function renderSidebar() {
     const row = document.createElement('div');
     row.className = 'nav-item' + (state.selection.objectId === obj.id ? ' active' : '');
     row.textContent = obj.name || obj.id;
-    row.onclick = () => { state.selection = { view: 'object', objectId: obj.id, roomId: null, itemId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' }; renderEditor(); renderSidebar(); };
+    row.onclick = () => { state.selection = defaultSelection({ view: 'object', objectId: obj.id }); renderEditor(); renderSidebar(); };
     objectList.appendChild(row);
   });
   const btnNewObject = document.createElement('button');
@@ -235,11 +251,28 @@ function renderSidebar() {
   sidebar.appendChild(objectList);
   sidebar.appendChild(btnNewObject);
 
+  sidebar.appendChild(sectionTitle('Gegner'));
+  const enemyList = document.createElement('div');
+  enemyList.className = 'nav-list';
+  (state.data.enemies || []).forEach(enemy => {
+    const row = document.createElement('div');
+    row.className = 'nav-item' + (state.selection.enemyId === enemy.id ? ' active' : '');
+    row.textContent = enemy.name || enemy.id;
+    row.onclick = () => { state.selection = defaultSelection({ view: 'enemy', enemyId: enemy.id }); renderEditor(); renderSidebar(); };
+    enemyList.appendChild(row);
+  });
+  const btnNewEnemy = document.createElement('button');
+  btnNewEnemy.textContent = 'Neuer Gegner';
+  btnNewEnemy.style.marginTop = '8px';
+  btnNewEnemy.onclick = addEnemy;
+  sidebar.appendChild(enemyList);
+  sidebar.appendChild(btnNewEnemy);
+
   renderNpcSidebar({
     container: sidebar,
     state,
     selection: state.selection,
-    onSelect: (id) => { state.selection = { view: 'npc', npcId: id, roomId: null, itemId: null, objectId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' }; renderEditor(); renderSidebar(); },
+    onSelect: (id) => { state.selection = defaultSelection({ view: 'npc', npcId: id }); renderEditor(); renderSidebar(); },
     onAdd: addNpc,
   });
 }
@@ -262,6 +295,8 @@ function renderEditor() {
     renderItemEditor();
   } else if (state.selection.view === 'object') {
     renderObjectEditor();
+  } else if (state.selection.view === 'enemy') {
+    renderEnemyEditor();
   } else if (state.selection.view === 'npc') {
     renderNpcView();
   } else if (state.selection.view === 'dialog') {
@@ -451,6 +486,89 @@ function renderObjectEditor() {
   viewEl.appendChild(card);
 }
 
+function renderEnemyEditor() {
+  const enemy = (state.data.enemies || []).find(e => e.id === state.selection.enemyId);
+  if (!enemy) return;
+  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> Gegner: ${enemy.id}</div>`;
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  card.appendChild(createFieldGrid([
+    field('ID', 'text', enemy.id, (v) => updateEnemy(enemy, 'id', v)),
+    field('Name', 'text', enemy.name, (v) => updateEnemy(enemy, 'name', v)),
+  ]));
+
+  const asciiGrid = document.createElement('div');
+  asciiGrid.className = 'form-grid';
+  const asciiField = document.createElement('div');
+  asciiField.className = 'field';
+  const asciiLabel = document.createElement('label');
+  asciiLabel.textContent = 'ASCII-Datei';
+  const asciiInput = document.createElement('input');
+  const listId = `ascii-files-${enemy.id}`;
+  asciiInput.type = 'text';
+  asciiInput.value = (enemy.ascii && enemy.ascii.file) || '';
+  asciiInput.setAttribute('list', listId);
+  asciiInput.oninput = () => updateEnemyAscii(enemy, 'file', asciiInput.value);
+  const dl = document.createElement('datalist');
+  dl.id = listId;
+  (state.asciiFiles || []).forEach(file => {
+    const opt = document.createElement('option');
+    opt.value = file;
+    dl.appendChild(opt);
+  });
+  asciiField.append(asciiLabel, asciiInput, dl);
+
+  const fontField = field('ASCII Font Size', 'number', enemy.ascii?.fontSize ?? '', (v) => updateEnemyAscii(enemy, 'fontSize', v));
+  asciiGrid.append(asciiField, fontField);
+  card.appendChild(asciiGrid);
+
+  const desc = document.createElement('div');
+  desc.className = 'field';
+  desc.innerHTML = '<label>Beschreibung</label>';
+  const area = document.createElement('textarea');
+  area.value = enemy.description || '';
+  area.oninput = () => updateEnemy(enemy, 'description', area.value);
+  desc.appendChild(area);
+  card.appendChild(desc);
+
+  card.appendChild(createFieldGrid([
+    field('HP', 'number', enemy.stats?.hp ?? '', (v) => updateEnemyStat(enemy, 'hp', v)),
+    field('Angriff', 'number', enemy.stats?.attack ?? '', (v) => updateEnemyStat(enemy, 'attack', v)),
+    field('Verteidigung', 'number', enemy.stats?.defense ?? '', (v) => updateEnemyStat(enemy, 'defense', v)),
+  ]));
+
+  const behaviorGrid = document.createElement('div');
+  behaviorGrid.className = 'form-grid';
+  behaviorGrid.appendChild(field('Flucht-Wahrscheinlichkeit', 'number', enemy.behavior?.fleeDifficulty ?? '', (v) => updateEnemyBehavior(enemy, 'fleeDifficulty', v)));
+  card.appendChild(behaviorGrid);
+
+  const dropsField = document.createElement('div');
+  dropsField.className = 'field';
+  dropsField.innerHTML = '<label>Beute (kommagetrennt)</label>';
+  const dropsInput = document.createElement('input');
+  dropsInput.type = 'text';
+  dropsInput.value = (enemy.drops || []).join(', ');
+  dropsInput.oninput = () => updateEnemy(enemy, 'drops', dropsInput.value.split(',').map(d => d.trim()).filter(Boolean));
+  dropsField.appendChild(dropsInput);
+  card.appendChild(dropsField);
+
+  card.appendChild(eventArea('On Attack', enemy.on_attack || [], (val) => updateEnemy(enemy, 'on_attack', val)));
+  card.appendChild(eventArea('On Defeat', enemy.on_defeat || [], (val) => updateEnemy(enemy, 'on_defeat', val)));
+
+  const actions = document.createElement('div');
+  actions.style.display = 'flex';
+  actions.style.gap = '10px';
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.textContent = 'Gegner löschen';
+  del.onclick = () => deleteEnemy(enemy.id);
+  actions.appendChild(del);
+  card.appendChild(actions);
+
+  viewEl.appendChild(card);
+}
+
 function renderNpcView() {
   const npc = (state.data.npcs || []).find(n => n.id === state.selection.npcId);
   if (!npc) return;
@@ -463,7 +581,7 @@ function renderNpcView() {
     onDelete: deleteNpc,
     onOpenDialog: (id) => {
       ensureDialogForNpc(state.data, id);
-      state.selection = { view: 'dialog', dialogId: id, dialogNodeId: null, npcId: id, roomId: null, itemId: null, objectId: null, dialogMode: 'editor' };
+      state.selection = defaultSelection({ view: 'dialog', dialogId: id, dialogNodeId: null, npcId: id });
       renderEditor();
       renderSidebar();
     },
@@ -1102,13 +1220,39 @@ function updateObject(obj, key, value) {
   setDirty(true);
 }
 
+function updateEnemy(enemy, key, value) {
+  enemy[key] = value;
+  setDirty(true);
+}
+
+function updateEnemyAscii(enemy, key, value) {
+  enemy.ascii = enemy.ascii || {};
+  const parsed = key === 'fontSize' ? Number(value) : value;
+  enemy.ascii[key] = key === 'fontSize' && !value ? '' : (Number.isFinite(parsed) || key !== 'fontSize' ? parsed : '');
+  setDirty(true);
+}
+
+function updateEnemyStat(enemy, key, value) {
+  enemy.stats = enemy.stats || {};
+  const num = Number(value);
+  enemy.stats[key] = Number.isFinite(num) ? num : 0;
+  setDirty(true);
+}
+
+function updateEnemyBehavior(enemy, key, value) {
+  enemy.behavior = enemy.behavior || {};
+  const num = Number(value);
+  enemy.behavior[key] = Number.isFinite(num) ? num : 0;
+  setDirty(true);
+}
+
 function addRoom() {
   const id = prompt('Neue Raum-ID:');
   if (!id) return;
   const newRoom = { id, title: id, description: '', ascii: '', items: [], objects: [], exits: {}, exitMeta: {}, on_enter: [], on_first_enter: [] };
   state.data.rooms = state.data.rooms || [];
   state.data.rooms.push(newRoom);
-  state.selection = { view: 'room', roomId: id, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'room', roomId: id });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1118,7 +1262,7 @@ function addRoom() {
 function deleteRoom(id) {
   if (!confirm('Raum wirklich löschen?')) return;
   state.data.rooms = (state.data.rooms || []).filter(r => r.id !== id);
-  state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1131,7 +1275,7 @@ function addItem() {
   const item = { id, name: id, description: '', pickup: true, combine: {}, on_use: [] };
   state.data.items = state.data.items || [];
   state.data.items.push(item);
-  state.selection = { view: 'item', itemId: id, roomId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'item', itemId: id });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1145,7 +1289,7 @@ function deleteItem(id) {
     items: (room.items || []).filter(itemId => itemId !== id)
   }));
   setDirty(true);
-  state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'world' });
   renderSidebar();
   renderEditor();
 }
@@ -1156,7 +1300,7 @@ function addObject() {
   const obj = { id, name: id, description: '', locked: false, use: [], on_locked_use: [], inspect: [] };
   state.data.objects = state.data.objects || [];
   state.data.objects.push(obj);
-  state.selection = { view: 'object', objectId: id, roomId: null, itemId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'object', objectId: id });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1169,7 +1313,28 @@ function deleteObject(id) {
     ...room,
     objects: (room.objects || []).filter(objId => objId !== id),
   }));
-  state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'world' });
+  setDirty(true);
+  renderSidebar();
+  renderEditor();
+}
+
+function addEnemy() {
+  const id = prompt('Neue Gegner-ID:');
+  if (!id) return;
+  const enemy = { id, name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], on_attack: [], on_defeat: [] };
+  state.data.enemies = state.data.enemies || [];
+  state.data.enemies.push(enemy);
+  state.selection = defaultSelection({ view: 'enemy', enemyId: id });
+  setDirty(true);
+  renderSidebar();
+  renderEditor();
+}
+
+function deleteEnemy(id) {
+  if (!confirm('Gegner wirklich löschen?')) return;
+  state.data.enemies = (state.data.enemies || []).filter(e => e.id !== id);
+  state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1182,7 +1347,7 @@ function addNpc() {
   const npc = createNpcDraft(name);
   state.data.npcs.push(npc);
   ensureDialogForNpc(state.data, npc.id);
-  state.selection = { view: 'npc', npcId: npc.id, roomId: null, itemId: null, objectId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'npc', npcId: npc.id });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1192,7 +1357,7 @@ function deleteNpc(id) {
   if (!confirm('NPC wirklich löschen?')) return;
   state.data.npcs = (state.data.npcs || []).filter(n => n.id !== id);
   if (state.data.dialogs) delete state.data.dialogs[id];
-  state.selection = { view: 'world', roomId: null, itemId: null, objectId: null, npcId: null, dialogId: null, dialogNodeId: null, dialogMode: 'editor' };
+  state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -1491,6 +1656,7 @@ function applyExitLockingMetaToRooms(adventureData) {
 function prepareAdventureForSave(data) {
   ensureNpcCollection(data);
   ensureDialogState(data);
+  data.enemies = data.enemies || [];
   const cloned = JSON.parse(JSON.stringify(data));
   applyExitLockingMetaToRooms(cloned);
   return cloned;
@@ -1506,6 +1672,7 @@ async function saveCurrent() {
       rooms: prepared.rooms,
       items: prepared.items,
       objects: prepared.objects,
+      enemies: prepared.enemies,
       npcs: prepared.npcs,
       dialogs: prepared.dialogs,
     });
