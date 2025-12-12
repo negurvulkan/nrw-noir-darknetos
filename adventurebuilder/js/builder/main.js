@@ -431,6 +431,19 @@ function renderItemEditor() {
   desc.appendChild(area);
   card.appendChild(desc);
 
+  const combatFields = document.createElement('div');
+  combatFields.className = 'field';
+  combatFields.innerHTML = '<label>Kampfwerte</label>';
+  const combatGrid = createFieldGrid([
+    field('Kampfangriff', 'number', item.weapon?.attack ?? '', (v) => updateItemWeapon(item, 'attack', v)),
+    field('Kampfverteidigung', 'number', item.weapon?.defense ?? '', (v) => updateItemWeapon(item, 'defense', v))
+  ]);
+  const combatHint = document.createElement('p');
+  combatHint.className = 'hint';
+  combatHint.textContent = 'Werte ungleich 0 machen das Item im Kampf als Waffe verwendbar (Angriff + Verteidigung).';
+  combatFields.append(combatGrid, combatHint);
+  card.appendChild(combatFields);
+
   card.appendChild(combineTable(item));
   card.appendChild(eventArea('On Use', item.on_use || [], (val) => updateItem(item, 'on_use', val)));
 
@@ -1212,6 +1225,13 @@ function updateItem(item, key, value) {
   setDirty(true);
 }
 
+function updateItemWeapon(item, key, value) {
+  item.weapon = item.weapon || {};
+  const num = Number(value);
+  item.weapon[key] = Number.isFinite(num) ? num : 0;
+  setDirty(true);
+}
+
 function updateObject(obj, key, value) {
   obj[key] = value;
   setDirty(true);
@@ -1269,7 +1289,7 @@ function deleteRoom(id) {
 function addItem() {
   const id = prompt('Neue Item-ID:');
   if (!id) return;
-  const item = { id, name: id, description: '', pickup: true, combine: {}, on_use: [] };
+  const item = { id, name: id, description: '', pickup: true, combine: {}, on_use: [], weapon: { attack: 0, defense: 0 } };
   state.data.items = state.data.items || [];
   state.data.items.push(item);
   state.selection = defaultSelection({ view: 'item', itemId: id });
