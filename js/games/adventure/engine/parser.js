@@ -13,7 +13,7 @@ const VERB_SYNONYMS = {
   attack: ['angriff', 'angreifen', 'attack', 'schlag', 'kämpfe', 'kaempfe'],
   defend: ['verteidige', 'verteidigen', 'block', 'blocken', 'defend'],
   flee: ['fliehe', 'fliehen', 'flucht', 'lauf weg', 'renne weg', 'escape', 'flee'],
-  combine: ['kombiniere', 'combine'],
+  combine: ['kombiniere', 'kombinieren', 'combine'],
   talk: ['rede', 'rede mit', 'sprich', 'sprich mit', 'spreche', 'talk', 'dialog'],
   inventory: ['inventar', 'tasche', 'beutel', 'i', 'inv', 'rucksack'],
   help: ['hilfe', 'help'],
@@ -112,17 +112,25 @@ export function parseInput(text) {
   let object = null;
   let target = null;
 
-  // combine has special pattern "kombiniere X mit Y"
+  // combine hat eigenes Schema: mehrere Items + optionale Station
   if (verb === 'combine') {
-    const match =
-      lower.match(/kombiniere\s+(.+?)\s+mit\s+(.+)/) ||
-      lower.match(/combine\s+(.+?)\s+with\s+(.+)/);
-    if (match) {
-      object = match[1].trim();
-      target = match[2].trim();
-    } else {
-      object = tokens.slice(1).join(' ');
+    const withoutVerb = lower.replace(/^kombiniere\s+/, '').replace(/^kombinieren\s+/, '').replace(/^combine\s+/, '');
+    // Station optional nach "auf" oder "on"
+    let station = null;
+    let itemPart = withoutVerb;
+    const stationMatch = withoutVerb.match(/(.+?)\s+(auf|on)\s+(.+)/);
+    if (stationMatch) {
+      itemPart = (stationMatch[1] || '').trim();
+      station = (stationMatch[3] || '').trim();
     }
+
+    const itemTokens = itemPart
+      .split(/\s+(mit|with|und|and)\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const items = itemTokens.length ? itemTokens : (itemPart ? [itemPart.trim()] : []);
+    return { verb, items, station: station || null, raw, object: items[0] || null, target: items[1] || null, direction: null };
   } else if (verb === 'go') {
     // attempt to find direction after verb
     const dirToken = tokens.find((t) => DIRECTION_ALIASES[t]);

@@ -1,0 +1,7 @@
+{
+  "id": "trichter",
+  "name": "Zinntrichter",
+  "description": "Ein kleiner Trichter aus Zinn, ideal um Flüssigkeiten umzuleiten.",
+  "pickup": true,
+  "stackable": false
+}

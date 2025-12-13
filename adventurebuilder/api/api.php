@@ -263,9 +263,14 @@ function persistCollection($dir, $entries, $type)
     // Entferne Dateien, die nicht mehr existieren
     foreach (glob($dir . '/*.json') as $existing) {
         $basename = basename($existing, '.json');
+        if ($basename === 'index') continue;
         if (!in_array($basename, $ids, true)) {
             unlink($existing);
         }
+    }
+
+    if ($type === 'items') {
+        writeJsonFile($dir . '/index.json', array_values($ids));
     }
 }
 
@@ -295,6 +300,7 @@ function readJsonDirectory($dir)
     if (!is_dir($dir)) return [];
     $data = [];
     foreach (glob($dir . '/*.json') as $file) {
+        if (basename($file) === 'index.json') continue;
         $content = readJsonFile($file);
         if ($content) $data[] = $content;
     }

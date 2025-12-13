@@ -1,6 +1,6 @@
 # NRW Noir Adventure Engine
 
-**Version:** 1.7.0
+**Version:** 1.8.0
 
 ## Features des Adventure Builders
 - **Dashboard für Adventures:** Adventures auflisten, anlegen, bearbeiten, duplizieren und direkt aus dem Builder öffnen.
@@ -17,6 +17,7 @@
 - **ASCII-Upload:** ASCII-Dateien hochladen und im Builder verwalten, damit Räume sofort passende Artworks erhalten.
 - **Neue Demo-Adventure:** "Schatten der Domruine" als gotisches Beispiel mit Krypta, Turm, NPC-Dialogen, Gegnern und Beute.
 - **Optionaler AI Assist:** Vorschläge für Namen, Beschreibungen, Event-Ketten und Plot-Hooks direkt im Builder erzeugen (via OpenAI und serverseitigem Proxy mit Feature Flag).
+- **Crafting Light:** Kombinations-Rezepte mit Inputs, Tools, Stationen und Event-Ketten direkt im Item-Editor pflegen; On-Combine-Hooks lassen sich für Sonderaktionen definieren.
 
 ## AI Assist konfigurieren
 

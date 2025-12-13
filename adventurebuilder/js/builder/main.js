@@ -831,6 +831,7 @@ function renderItemEditor() {
   combatFields.append(combatGrid, combatHint);
   card.appendChild(combatFields);
 
+  card.appendChild(recipeEditor(item));
   card.appendChild(combineTable(item));
   card.appendChild(eventArea('On Use', item.on_use || [], (val) => updateItem(item, 'on_use', val)));
 
@@ -1512,17 +1513,194 @@ function createEventEditor(initialValue, onChange) {
   return container;
 }
 
+function recipeEditor(item) {
+  item.recipe = item.recipe || {};
+  item.recipe.inputs = Array.isArray(item.recipe.inputs) ? item.recipe.inputs : [];
+  item.recipe.tools = Array.isArray(item.recipe.tools) ? item.recipe.tools : [];
+  item.recipe.stations = Array.isArray(item.recipe.stations) ? item.recipe.stations : [];
+  item.recipe.events = Array.isArray(item.recipe.events) ? item.recipe.events : [];
+
+  const wrap = document.createElement('div');
+  wrap.className = 'card';
+  wrap.innerHTML = '<h4>Recipe (Crafting)</h4>';
+
+  const itemOptions = (state.data.items || []).map((it) => ({
+    value: it.id,
+    label: it.name ? `${it.name} (${it.id})` : it.id,
+  }));
+  const objectOptions = (state.data.objects || []).map((obj) => ({
+    value: obj.id,
+    label: obj.name ? `${obj.name} (${obj.id})` : obj.id,
+  }));
+
+  const createSelect = (options = [], value = '') => {
+    const select = document.createElement('select');
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '—';
+    select.appendChild(empty);
+    options.forEach((opt) => {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if (opt.value === value) option.selected = true;
+      select.appendChild(option);
+    });
+    return select;
+  };
+
+  const inputsField = document.createElement('div');
+  inputsField.className = 'field';
+  inputsField.innerHTML = '<label>Inputs (werden verbraucht)</label>';
+  const inputTable = document.createElement('table');
+  inputTable.className = 'table';
+  const inputHead = document.createElement('tr');
+  inputHead.innerHTML = '<th>Item</th><th>Menge</th><th></th>';
+  inputTable.appendChild(inputHead);
+  item.recipe.inputs.forEach((inp, idx) => {
+    const tr = document.createElement('tr');
+    const tdItem = document.createElement('td');
+    const select = createSelect(itemOptions, inp.id);
+    select.onchange = () => { item.recipe.inputs[idx].id = select.value; setDirty(true); };
+    tdItem.appendChild(select);
+    const tdQty = document.createElement('td');
+    const qty = document.createElement('input');
+    qty.type = 'number';
+    qty.min = '1';
+    qty.value = inp.qty || 1;
+    qty.onchange = () => { item.recipe.inputs[idx].qty = Number(qty.value) || 1; setDirty(true); };
+    tdQty.appendChild(qty);
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'ghost';
+    delBtn.textContent = 'x';
+    delBtn.onclick = () => { item.recipe.inputs.splice(idx, 1); setDirty(true); renderEditor(); };
+    tdDel.appendChild(delBtn);
+    tr.append(tdItem, tdQty, tdDel);
+    inputTable.appendChild(tr);
+  });
+  const addInput = document.createElement('button');
+  addInput.textContent = 'Input hinzufügen';
+  addInput.onclick = () => {
+    const first = (itemOptions[0] || {}).value || '';
+    item.recipe.inputs.push({ id: first, qty: 1 });
+    setDirty(true);
+    renderEditor();
+  };
+  inputsField.append(inputTable, addInput);
+
+  const toolsField = document.createElement('div');
+  toolsField.className = 'field';
+  toolsField.innerHTML = '<label>Tools (standardmäßig nicht verbraucht)</label>';
+  const toolsTable = document.createElement('table');
+  toolsTable.className = 'table';
+  const toolHead = document.createElement('tr');
+  toolHead.innerHTML = '<th>Tool</th><th>Menge</th><th>Verbrauchen?</th><th></th>';
+  toolsTable.appendChild(toolHead);
+  item.recipe.tools.forEach((tool, idx) => {
+    const tr = document.createElement('tr');
+    const tdTool = document.createElement('td');
+    const select = createSelect(itemOptions, tool.id);
+    select.onchange = () => { item.recipe.tools[idx].id = select.value; setDirty(true); };
+    tdTool.appendChild(select);
+    const tdQty = document.createElement('td');
+    const qty = document.createElement('input');
+    qty.type = 'number';
+    qty.min = '1';
+    qty.value = tool.qty || 1;
+    qty.onchange = () => { item.recipe.tools[idx].qty = Number(qty.value) || 1; setDirty(true); };
+    tdQty.appendChild(qty);
+    const tdConsume = document.createElement('td');
+    const consume = document.createElement('input');
+    consume.type = 'checkbox';
+    consume.checked = tool.consume === true;
+    consume.onchange = () => { item.recipe.tools[idx].consume = consume.checked; setDirty(true); };
+    tdConsume.appendChild(consume);
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'ghost';
+    delBtn.textContent = 'x';
+    delBtn.onclick = () => { item.recipe.tools.splice(idx, 1); setDirty(true); renderEditor(); };
+    tdDel.appendChild(delBtn);
+    tr.append(tdTool, tdQty, tdConsume, tdDel);
+    toolsTable.appendChild(tr);
+  });
+  const addTool = document.createElement('button');
+  addTool.textContent = 'Tool hinzufügen';
+  addTool.onclick = () => {
+    const first = (itemOptions[0] || {}).value || '';
+    item.recipe.tools.push({ id: first, qty: 1, consume: false });
+    setDirty(true);
+    renderEditor();
+  };
+  toolsField.append(toolsTable, addTool);
+
+  const stationsField = document.createElement('div');
+  stationsField.className = 'field';
+  stationsField.innerHTML = '<label>Stations (Objekte im Raum)</label>';
+  const stationTable = document.createElement('table');
+  stationTable.className = 'table';
+  const stationHead = document.createElement('tr');
+  stationHead.innerHTML = '<th>Objekt-ID</th><th></th>';
+  stationTable.appendChild(stationHead);
+  const datalistId = `stations-${item.id}`;
+  const dl = document.createElement('datalist');
+  dl.id = datalistId;
+  objectOptions.forEach((opt) => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.label = opt.label;
+    dl.appendChild(option);
+  });
+  item.recipe.stations.forEach((station, idx) => {
+    const tr = document.createElement('tr');
+    const tdStation = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = station || '';
+    input.setAttribute('list', datalistId);
+    input.oninput = () => { item.recipe.stations[idx] = input.value; setDirty(true); };
+    tdStation.appendChild(input);
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'ghost';
+    delBtn.textContent = 'x';
+    delBtn.onclick = () => { item.recipe.stations.splice(idx, 1); setDirty(true); renderEditor(); };
+    tdDel.appendChild(delBtn);
+    tr.append(tdStation, tdDel);
+    stationTable.appendChild(tr);
+  });
+  const addStation = document.createElement('button');
+  addStation.textContent = 'Station hinzufügen';
+  addStation.onclick = () => {
+    item.recipe.stations.push('');
+    setDirty(true);
+    renderEditor();
+  };
+  stationsField.append(stationTable, addStation, dl);
+
+  const eventsField = document.createElement('div');
+  eventsField.className = 'field';
+  eventsField.innerHTML = '<label>Recipe Events</label>';
+  const eventEditor = createEventEditor(item.recipe.events, (val) => { item.recipe.events = val; setDirty(true); });
+  eventsField.appendChild(eventEditor);
+
+  wrap.append(inputsField, toolsField, stationsField, eventsField);
+  return wrap;
+}
+
 function combineTable(item) {
   const wrap = document.createElement('div');
   wrap.className = 'field';
-  wrap.innerHTML = '<label>Combine Mapping</label>';
+  wrap.innerHTML = '<label>On Combine Hooks</label>';
+  item.on_combine = item.on_combine || item.combine || {};
+  const mapping = item.on_combine;
   const table = document.createElement('table');
   table.className = 'table';
   const head = document.createElement('tr');
   head.innerHTML = '<th>Ziel-ID</th><th>Event-Liste (JSON)</th><th></th>';
   table.appendChild(head);
-  const combine = item.combine || {};
-  Object.entries(combine).forEach(([targetId, events]) => {
+  Object.entries(mapping).forEach(([targetId, events]) => {
     const tr = document.createElement('tr');
     const tdTarget = document.createElement('td');
     const inputTarget = document.createElement('input');
@@ -1530,21 +1708,23 @@ function combineTable(item) {
     inputTarget.onchange = () => {
       const newId = inputTarget.value.trim();
       if (!newId) return;
-      delete item.combine[targetId];
-      item.combine[newId] = events;
+      delete mapping[targetId];
+      mapping[newId] = events;
+      item.on_combine = mapping;
+      item.combine = mapping;
       setDirty(true);
     };
     tdTarget.appendChild(inputTarget);
 
     const tdEvents = document.createElement('td');
-    const eventEditor = createEventEditor(events || [], (val) => { item.combine[targetId] = val; setDirty(true); });
+    const eventEditor = createEventEditor(events || [], (val) => { mapping[targetId] = val; item.on_combine = mapping; item.combine = mapping; setDirty(true); });
     tdEvents.appendChild(eventEditor);
 
     const tdBtn = document.createElement('td');
     const del = document.createElement('button');
     del.className = 'ghost';
     del.textContent = 'x';
-    del.onclick = () => { delete item.combine[targetId]; setDirty(true); renderEditor(); };
+    del.onclick = () => { delete mapping[targetId]; item.on_combine = mapping; item.combine = mapping; setDirty(true); renderEditor(); };
     tdBtn.appendChild(del);
 
     tr.append(tdTarget, tdEvents, tdBtn);
@@ -1552,12 +1732,13 @@ function combineTable(item) {
   });
 
   const btn = document.createElement('button');
-  btn.textContent = 'Mapping hinzufügen';
+  btn.textContent = 'Hook hinzufügen';
   btn.onclick = () => {
     const target = prompt('Ziel-Item-ID für Kombination:');
     if (!target) return;
-    item.combine = item.combine || {};
-    item.combine[target] = [];
+    mapping[target] = mapping[target] || [];
+    item.on_combine = mapping;
+    item.combine = mapping;
     setDirty(true);
     renderEditor();
   };

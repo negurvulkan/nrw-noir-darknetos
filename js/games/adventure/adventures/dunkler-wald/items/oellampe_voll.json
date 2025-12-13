@@ -1,0 +1,27 @@
+{
+  "id": "oellampe_voll",
+  "name": "Öllampe (gefüllt)",
+  "description": "Die Lampe ist frisch gefüllt und verbreitet einen schweren Geruch nach altem Öl.",
+  "pickup": true,
+  "recipe": {
+    "inputs": [
+      { "id": "oellampe_leer", "qty": 1 },
+      { "id": "oel", "qty": 1 }
+    ],
+    "tools": [
+      { "id": "trichter", "qty": 1, "consume": false }
+    ],
+    "stations": [
+      { "id": "tisch" }
+    ],
+    "events": [
+      { "type": "message", "text": "Du füllst die Lampe. Es riecht nach altem Öl." }
+    ]
+  },
+  "on_combine": {
+    "feuerzeug": [
+      { "type": "flag_set", "key": "keller_beleuchtet", "value": true },
+      { "type": "message", "text": "Die Lampe brennt. Schatten werden zu Formen." }
+    ]
+  }
+}

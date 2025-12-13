@@ -21,6 +21,9 @@ const DEBUG_LOG_LIMIT = 200;
 let debugLogging = false;
 const debugLogEntries = [];
 
+let recipeIndex = [];
+let recipeKeyIndex = new Map();
+
 const createEmptyCache = () => ({
   world: null,
   rooms: {},
@@ -28,7 +31,9 @@ const createEmptyCache = () => ({
   objects: {},
   enemies: {},
   npcs: {},
-  dialogs: {}
+  dialogs: {},
+  itemIds: [],
+  recipeIndexBuilt: false
 });
 
 const createEmptyState = () => ({
@@ -245,6 +250,13 @@ async function loadItem(id) {
   if (!cache.items[id]) {
     cache.items[id] = await loadJson(`items/${id}.json`);
   }
+  const itemId = cache.items[id].id || id;
+  if (!cache.itemIds.includes(itemId)) {
+    cache.itemIds.push(itemId);
+  }
+  if (cache.recipeIndexBuilt) {
+    registerRecipeFromItem(cache.items[id]);
+  }
   return cache.items[id];
 }
 
@@ -279,6 +291,61 @@ async function loadDialog(npcId) {
   return cache.dialogs[npcId];
 }
 
+async function loadItemIndex() {
+  if (cache.itemIds && cache.itemIds.length) {
+    return cache.itemIds;
+  }
+  try {
+    const index = await loadJson('items/index.json');
+    if (Array.isArray(index)) {
+      cache.itemIds = index;
+      return cache.itemIds;
+    }
+  } catch (err) {
+    console.warn('Item-Index konnte nicht geladen werden:', err);
+  }
+  cache.itemIds = cache.itemIds || [];
+  return cache.itemIds;
+}
+
+function registerRecipeFromItem(item) {
+  if (!item || !item.recipe || !Array.isArray(item.recipe.inputs)) return;
+  const inputs = normalizeRecipeInputs(item.recipe.inputs);
+  if (!inputs.length) return;
+  const tools = normalizeRecipeTools(item.recipe.tools || []);
+  const stations = (item.recipe.stations || []).map((s) => normalizeId(s.id || s)).filter(Boolean);
+  const events = Array.isArray(item.recipe.events) ? item.recipe.events : [];
+  const entry = {
+    outputId: normalizeId(item.id),
+    outputName: item.name || item.id,
+    recipe: { inputs, tools, stations, events }
+  };
+  const key = buildRecipeKey(inputs);
+  const exists = recipeKeyIndex.get(key)?.some((r) => r.outputId === entry.outputId);
+  if (exists) return;
+  recipeIndex.push(entry);
+  if (!recipeKeyIndex.has(key)) {
+    recipeKeyIndex.set(key, []);
+  }
+  recipeKeyIndex.get(key).push(entry);
+}
+
+async function ensureRecipeIndexBuilt() {
+  if (cache.recipeIndexBuilt) return;
+  resetRecipeData();
+  const ids = await loadItemIndex();
+  if (ids.length) {
+    for (const id of ids) {
+      // eslint-disable-next-line no-await-in-loop
+      const item = await loadItem(id);
+      registerRecipeFromItem(item);
+    }
+  } else {
+    Object.values(cache.items).forEach((item) => registerRecipeFromItem(item));
+  }
+  cache.recipeIndexBuilt = true;
+}
+
 function npcVisible(npc) {
   if (!npc) return false;
   if (npc.hidden_if_flag && flagMatches(npc.hidden_if_flag)) return false;
@@ -309,6 +376,7 @@ async function listNpcsInRoom(roomId) {
 function resetAdventureData(id) {
   cache = createEmptyCache();
   state = createEmptyState();
+  resetRecipeData();
   activeAdventureId = id;
   adventureActive = false;
 }
@@ -443,6 +511,34 @@ function findMatchByNormalized(list = [], query = '') {
   const exact = ids.find((id) => normalizeId(id) === normalizedQuery);
   if (exact) return exact;
   return ids.find((id) => normalizeId(id).includes(normalizedQuery)) || null;
+}
+
+function resetRecipeData() {
+  recipeIndex = [];
+  recipeKeyIndex = new Map();
+}
+
+function buildRecipeKey(inputs = []) {
+  return inputs.map((inp) => normalizeId(inp.id || inp)).sort().join('|');
+}
+
+function normalizeRecipeInputs(inputs = []) {
+  return inputs
+    .map((inp) => ({
+      id: normalizeId(inp.id || inp),
+      qty: Number.isFinite(inp.qty) && inp.qty > 0 ? inp.qty : 1
+    }))
+    .filter((inp) => inp.id);
+}
+
+function normalizeRecipeTools(tools = []) {
+  return tools
+    .map((tool) => ({
+      id: normalizeId(tool.id || tool),
+      qty: Number.isFinite(tool.qty) && tool.qty > 0 ? tool.qty : 1,
+      consume: tool.consume === true
+    }))
+    .filter((tool) => tool.id);
 }
 
 function flagMatches(condition) {
@@ -666,21 +762,160 @@ async function performUse(action) {
   advLog([cache.world.messages.unknownCommand]);
 }
 
+function formatIngredient(id, qty = 1) {
+  const cached = cache.items[id];
+  const label = cached?.name || id;
+  return qty > 1 ? `${label} (${qty}x)` : label;
+}
+
+function resolveStationRequirement(recipeStations = [], room = {}, specifiedStation = null) {
+  const stations = recipeStations.map((s) => normalizeId(s)).filter(Boolean);
+  const roomObjects = room.objects || [];
+
+  if (specifiedStation) {
+    const match = findMatchByNormalized(roomObjects, specifiedStation);
+    if (!match) {
+      return { ok: false, error: 'Hier gibt es keinen passenden Ort dafür.' };
+    }
+    if (stations.length && !stations.some((st) => st === normalizeId(match) || st === normalizeId(specifiedStation))) {
+      return { ok: false, error: `Du brauchst dafür: ${stations.join(', ')}.` };
+    }
+    return { ok: true, station: normalizeId(match) };
+  }
+
+  if (!stations.length) {
+    return { ok: true, station: null };
+  }
+
+  const matches = stations.filter((st) => findMatchByNormalized(roomObjects, st));
+  if (matches.length === 1) {
+    return { ok: true, station: matches[0] };
+  }
+  if (!matches.length) {
+    return { ok: false, error: `Du brauchst dafür: ${stations.join(', ')}.` };
+  }
+  return { ok: false, error: `Wähle einen Ort: ${matches.join(', ')}.` };
+}
+
+function findCraftingMatch(tokens = [], room = {}, station = null) {
+  const tokenSet = new Set(tokens.map((t) => normalizeId(t)).filter(Boolean));
+  let lastStationError = null;
+  for (const entry of recipeIndex) {
+    const inputIds = entry.recipe.inputs.map((inp) => inp.id);
+    const toolIds = (entry.recipe.tools || []).map((tool) => tool.id);
+    const required = new Set([...inputIds, ...toolIds]);
+
+    const hasAllInputs = inputIds.every((id) => tokenSet.has(id));
+    if (!hasAllInputs) continue;
+    const hasAllTools = toolIds.every((id) => tokenSet.has(id));
+    if (!hasAllTools) continue;
+
+    const extras = [...tokenSet].filter((id) => !required.has(id));
+    if (extras.length) continue;
+
+    const stationCheck = resolveStationRequirement(entry.recipe.stations, room, station);
+    if (!stationCheck.ok) {
+      lastStationError = stationCheck.error;
+      continue;
+    }
+    return { entry, station: stationCheck.station || station, error: null };
+  }
+  return { entry: null, error: lastStationError };
+}
+
+function hasToolAvailable(tool, room) {
+  const invQty = getInvQty(tool.id);
+  const inRoom = !!findMatchByNormalized(room.objects || [], tool.id);
+  if (tool.consume) {
+    return invQty >= tool.qty;
+  }
+  return invQty >= tool.qty || inRoom;
+}
+
+async function tryOnCombineHooks(tokens = []) {
+  const inventoryIds = tokens
+    .map((token) => findMatchByNormalized(state.inventory, token))
+    .filter((id) => id && getInvQty(id) > 0)
+    .filter((id, idx, arr) => arr.indexOf(id) === idx);
+
+  for (const baseId of inventoryIds) {
+    // eslint-disable-next-line no-await-in-loop
+    const item = await loadItem(baseId);
+    const mapping = item.on_combine || item.combine || {};
+    for (const [otherId, events] of Object.entries(mapping)) {
+      const normalizedOther = normalizeId(otherId);
+      const hasOther = inventoryIds.some((candidate) => normalizeId(candidate) === normalizedOther);
+      if (hasOther && Array.isArray(events)) {
+        // eslint-disable-next-line no-await-in-loop
+        await runEvents(events, state, ctxForEvents());
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function performCombine(action) {
-  const sourceId = normalizeId(action.object || '');
-  const targetId = normalizeId(action.target || '');
-  const match = findMatchByNormalized(state.inventory, action.object);
-  if (!match || getInvQty(match) <= 0) {
-    advLog(['Dir fehlt ein benötigtes Item.']);
+  const room = await loadRoom(state.location);
+  const items = Array.isArray(action.items) && action.items.length
+    ? action.items
+    : [action.object, action.target].filter(Boolean);
+  const normalizedItems = items.map((i) => normalizeId(i)).filter(Boolean);
+
+  if (normalizedItems.length < 2) {
+    advLog(['Was genau willst du kombinieren?']);
     return;
   }
-  const item = await loadItem(match);
-  const combination = item.combine ? item.combine[targetId] : null;
-  if (!combination) {
-    advLog(['Das lässt sich nicht kombinieren.']);
+
+  const specifiedStation = action.station ? normalizeId(action.station) : null;
+  if (specifiedStation && !findMatchByNormalized(room.objects || [], specifiedStation)) {
+    advLog(['Hier gibt es keinen passenden Ort dafür.']);
     return;
   }
-  await runEvents(combination, state, ctxForEvents());
+
+  await ensureRecipeIndexBuilt();
+  const match = findCraftingMatch(normalizedItems, room, specifiedStation);
+  if (match.entry) {
+    const missingInputs = match.entry.recipe.inputs.filter((inp) => getInvQty(inp.id) < inp.qty);
+    if (missingInputs.length) {
+      const missing = missingInputs.map((inp) => formatIngredient(inp.id, inp.qty));
+      advLog([`Dir fehlt: ${missing.join(', ')}.`]);
+      return;
+    }
+
+    const missingTools = (match.entry.recipe.tools || []).filter((tool) => !hasToolAvailable(tool, room));
+    if (missingTools.length) {
+      const missing = missingTools.map((tool) => formatIngredient(tool.id, tool.qty));
+      advLog([`Du brauchst dafür: ${missing.join(', ')}.`]);
+      return;
+    }
+
+    match.entry.recipe.inputs.forEach((inp) => removeFromInventory(inp.id, inp.qty));
+    (match.entry.recipe.tools || [])
+      .filter((tool) => tool.consume)
+      .forEach((tool) => removeFromInventory(tool.id, tool.qty));
+
+    await addToInventory(match.entry.outputId, 1);
+    const crafted = await loadItem(match.entry.outputId);
+    advLog([`Du stellst her: ${crafted.name || match.entry.outputId}.`]);
+    saveState();
+
+    if (Array.isArray(match.entry.recipe.events) && match.entry.recipe.events.length) {
+      await runEvents(match.entry.recipe.events, state, ctxForEvents());
+    }
+    saveState();
+    return;
+  }
+
+  if (match.error) {
+    advLog([match.error]);
+    return;
+  }
+
+  const handled = await tryOnCombineHooks(normalizedItems);
+  if (handled) return;
+
+  advLog(['Das lässt sich nicht kombinieren.']);
 }
 
 async function performTalk(action) {
@@ -898,7 +1133,7 @@ function printHelp() {
     '- benutze <objekt|item>',
     '- im Kampf: attack, defend, flee, use <item>',
     '- sprich mit <person>',
-    '- kombiniere <item> mit <anderes>',
+    '- kombiniere <item> mit <anderes> [auf <station>]',
     '- inventar, hilfe',
     '- exit oder quit beendet das Adventure'
   ]);
