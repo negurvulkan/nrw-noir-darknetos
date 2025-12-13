@@ -1,11 +1,13 @@
 # NRW Noir Adventure Engine
 
-## NPCs (`npcs/*.json`)
+## Actors – NPCs (`actors/*.json` mit `type: "npc"`)
 
-NPCs können in Räumen stehen und Dialoge starten.
+NPCs werden in der gemeinsamen Actor-Sammlung gespeichert, können in Räumen stehen und Dialoge starten. Legacy-Dateien unter
+`npcs/*.json` werden beim Laden automatisch in die Actor-Struktur mit `type: "npc"` überführt.
 
 ### Pflichtfelder
 - **id**: Eindeutige Kennung.
+- **type**: Muss `npc` sein, wenn der Datensatz unter `actors/` liegt.
 - **name**: Anzeigename in der Ausgabe.
 
 ### Optionale Felder
@@ -22,6 +24,7 @@ Während des Spiels werden Position, Flags und Counter des NPC in `state.npcs[id
 ```json
 {
   "id": "hausmeister",
+  "type": "npc",
   "name": "Hausmeister Krause",
   "description": "Ein mürrischer Mann mit Taschenlampe.",
   "room": "flur",
