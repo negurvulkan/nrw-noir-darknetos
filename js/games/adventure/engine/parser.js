@@ -125,7 +125,7 @@ export function parseInput(text) {
     }
 
     const itemTokens = itemPart
-      .split(/\s+(mit|with|und|and)\s+/)
+      .split(/\s+(?:mit|with|und|and)\s+/) 
       .map((part) => part.trim())
       .filter(Boolean);
 
