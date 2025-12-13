@@ -1,6 +1,6 @@
 import { Api } from './api.js';
 import { initEventBlockEditor } from './event-blockly.js';
-import { renderNpcSidebar, renderNpcEditor, ensureNpcCollection, createNpcDraft } from './npcs.js';
+import { createActorDraft, ensureActorCollection, renderActorEditor, renderActorSidebar, slugify } from './actors.js';
 import { dialogGraphInfo, ensureDialogState, ensureDialogForNpc, nodeIds } from './dialogs.js';
 import { renderDialogEditor } from './dialogEditor.js';
 import { autoLayout, renderDialogMap } from './dialogMap.js';
@@ -63,18 +63,13 @@ function defaultSelection(overrides = {}) {
     roomId: null,
     itemId: null,
     objectId: null,
-    enemyId: null,
-    npcId: null,
     dialogId: null,
     dialogNodeId: null,
     dialogMode: 'editor',
+    actorId: null,
+    actorType: null,
     ...overrides,
   };
-}
-
-function ensureActorCollection(data) {
-  if (!data.actors) data.actors = [];
-  return data.actors;
 }
 
 function migrateLegacyActors(data) {
@@ -117,6 +112,18 @@ function actorsByType(type) {
 function findActor(type, id) {
   if (!id) return null;
   return actorsByType(type).find(actor => actor.id === id) || null;
+}
+
+function findActorById(id) {
+  if (!id) return null;
+  return (state.data?.actors || []).find(actor => actor.id === id) || null;
+}
+
+function getSelectedActor(expectedType = null) {
+  const actor = findActorById(state.selection.actorId);
+  if (!actor) return null;
+  if (expectedType && actor.type !== expectedType) return null;
+  return actor;
 }
 
 async function initAiAssist() {
@@ -360,8 +367,10 @@ function currentEntityType() {
   if (state.selection.view === 'room') return 'room';
   if (state.selection.view === 'item') return 'item';
   if (state.selection.view === 'object') return 'object';
-  if (state.selection.view === 'enemy') return 'enemy';
-  if (state.selection.view === 'npc') return 'npc';
+  if (state.selection.view === 'actor' || state.selection.view === 'dialog') {
+    const actor = getSelectedActor();
+    if (actor?.type) return actor.type;
+  }
   return 'room';
 }
 
@@ -386,13 +395,13 @@ function eventTargets() {
       targets.push({ value: 'object:on_locked_use', label: 'Objekt · On Locked Use', apply: (events) => updateObject(obj, 'on_locked_use', events) });
     }
   }
-  if (state.selection.view === 'enemy') {
-    const enemy = getSelectedEntity('enemy');
-    if (enemy) {
-      targets.push({ value: 'enemy:on_attack', label: 'Gegner · On Attack', apply: (events) => updateEnemyHook(enemy, 'on_attack', events) });
-      targets.push({ value: 'enemy:on_hit', label: 'Gegner · On Hit', apply: (events) => updateEnemyHook(enemy, 'on_hit', events) });
-      targets.push({ value: 'enemy:on_miss', label: 'Gegner · On Miss', apply: (events) => updateEnemyHook(enemy, 'on_miss', events) });
-      targets.push({ value: 'enemy:on_defeat', label: 'Gegner · On Defeat', apply: (events) => updateEnemyHook(enemy, 'on_defeat', events) });
+  if (state.selection.view === 'actor') {
+    const actor = getSelectedActor('enemy');
+    if (actor) {
+      targets.push({ value: 'enemy:on_attack', label: 'Gegner · On Attack', apply: (events) => updateEnemyHook(actor, 'on_attack', events) });
+      targets.push({ value: 'enemy:on_hit', label: 'Gegner · On Hit', apply: (events) => updateEnemyHook(actor, 'on_hit', events) });
+      targets.push({ value: 'enemy:on_miss', label: 'Gegner · On Miss', apply: (events) => updateEnemyHook(actor, 'on_miss', events) });
+      targets.push({ value: 'enemy:on_defeat', label: 'Gegner · On Defeat', apply: (events) => updateEnemyHook(actor, 'on_defeat', events) });
     }
   }
   return targets;
@@ -401,8 +410,8 @@ function eventTargets() {
 function getSelectedEntity(entityType) {
   if (!state.data) return null;
   const map = { room: { key: 'rooms', sel: 'roomId' }, item: { key: 'items', sel: 'itemId' }, object: { key: 'objects', sel: 'objectId' } };
-  if (entityType === 'npc') return findActor('npc', state.selection.npcId);
-  if (entityType === 'enemy') return findActor('enemy', state.selection.enemyId);
+  if (entityType === 'npc') return getSelectedActor('npc');
+  if (entityType === 'enemy') return getSelectedActor('enemy');
   const info = map[entityType];
   if (!info) return null;
   const id = state.selection[info.sel];
@@ -594,7 +603,6 @@ async function openAdventure(id) {
     state.data = res.data || res;
     ensureActorCollection(state.data);
     normalizeActors(state.data);
-    ensureNpcCollection(state.data);
     state.data.enemies = [];
     state.data.npcs = [];
     ensureDialogState(state.data);
@@ -671,29 +679,17 @@ function renderSidebar() {
   sidebar.appendChild(objectList);
   sidebar.appendChild(btnNewObject);
 
-  sidebar.appendChild(sectionTitle('Gegner'));
-  const enemyList = document.createElement('div');
-  enemyList.className = 'nav-list';
-  actorsByType('enemy').forEach(enemy => {
-    const row = document.createElement('div');
-    row.className = 'nav-item' + (state.selection.enemyId === enemy.id ? ' active' : '');
-    row.textContent = enemy.name || enemy.id;
-    row.onclick = () => { state.selection = defaultSelection({ view: 'enemy', enemyId: enemy.id }); renderEditor(); renderSidebar(); };
-    enemyList.appendChild(row);
-  });
-  const btnNewEnemy = document.createElement('button');
-  btnNewEnemy.textContent = 'Neuer Gegner';
-  btnNewEnemy.style.marginTop = '8px';
-  btnNewEnemy.onclick = addEnemy;
-  sidebar.appendChild(enemyList);
-  sidebar.appendChild(btnNewEnemy);
-
-  renderNpcSidebar({
+  renderActorSidebar({
     container: sidebar,
-    actors: actorsByType('npc'),
+    actors: state.data.actors || [],
     selection: state.selection,
-    onSelect: (id) => { state.selection = defaultSelection({ view: 'npc', npcId: id }); renderEditor(); renderSidebar(); },
-    onAdd: addNpc,
+    onSelect: (id, type) => {
+      state.selection = defaultSelection({ view: 'actor', actorId: id, actorType: type });
+      renderEditor();
+      renderSidebar();
+    },
+    onAddNpc: () => addActor('npc'),
+    onAddEnemy: () => addActor('enemy'),
   });
 }
 
@@ -715,10 +711,8 @@ function renderEditor() {
     renderItemEditor();
   } else if (state.selection.view === 'object') {
     renderObjectEditor();
-  } else if (state.selection.view === 'enemy') {
-    renderEnemyEditor();
-  } else if (state.selection.view === 'npc') {
-    renderNpcView();
+  } else if (state.selection.view === 'actor') {
+    renderActorView();
   } else if (state.selection.view === 'dialog') {
     renderDialogView();
   }
@@ -937,101 +931,27 @@ function renderObjectEditor() {
   viewEl.appendChild(card);
 }
 
-function renderEnemyEditor() {
-  const enemy = findActor('enemy', state.selection.enemyId);
-  if (!enemy) return;
-  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> Gegner: ${enemy.id}</div>`;
-  const card = document.createElement('div');
-  card.className = 'card';
-
-  card.appendChild(createFieldGrid([
-    field('ID', 'text', enemy.id, (v) => updateEnemy(enemy, 'id', v)),
-    field('Name', 'text', enemy.name, (v) => updateEnemy(enemy, 'name', v)),
-  ]));
-
-  const asciiGrid = document.createElement('div');
-  asciiGrid.className = 'form-grid';
-  const asciiField = document.createElement('div');
-  asciiField.className = 'field';
-  const asciiLabel = document.createElement('label');
-  asciiLabel.textContent = 'ASCII-Datei';
-  const asciiInput = document.createElement('input');
-  const listId = `ascii-files-${enemy.id}`;
-  asciiInput.type = 'text';
-  asciiInput.value = (enemy.ascii && enemy.ascii.file) || '';
-  asciiInput.setAttribute('list', listId);
-  asciiInput.oninput = () => updateEnemyAscii(enemy, 'file', asciiInput.value);
-  const dl = document.createElement('datalist');
-  dl.id = listId;
-  (state.asciiFiles || []).forEach(file => {
-    const opt = document.createElement('option');
-    opt.value = file;
-    dl.appendChild(opt);
-  });
-  asciiField.append(asciiLabel, asciiInput, dl);
-
-  const fontField = field('ASCII Font Size', 'number', enemy.ascii?.fontSize ?? '', (v) => updateEnemyAscii(enemy, 'fontSize', v));
-  asciiGrid.append(asciiField, fontField);
-  card.appendChild(asciiGrid);
-
-  const desc = document.createElement('div');
-  desc.className = 'field';
-  desc.innerHTML = '<label>Beschreibung</label>';
-  const area = document.createElement('textarea');
-  area.value = enemy.description || '';
-  area.oninput = () => updateEnemy(enemy, 'description', area.value);
-  desc.appendChild(area);
-  card.appendChild(desc);
-
-  card.appendChild(createFieldGrid([
-    field('HP', 'number', enemy.stats?.hp ?? '', (v) => updateEnemyStat(enemy, 'hp', v)),
-    field('Angriff', 'number', enemy.stats?.attack ?? '', (v) => updateEnemyStat(enemy, 'attack', v)),
-    field('Verteidigung', 'number', enemy.stats?.defense ?? '', (v) => updateEnemyStat(enemy, 'defense', v)),
-  ]));
-
-  const behaviorGrid = document.createElement('div');
-  behaviorGrid.className = 'form-grid';
-  behaviorGrid.appendChild(field('Flucht-Wahrscheinlichkeit', 'number', enemy.behavior?.fleeDifficulty ?? '', (v) => updateEnemyBehavior(enemy, 'fleeDifficulty', v)));
-  card.appendChild(behaviorGrid);
-
-  card.appendChild(multiselectField(
-    'Beute (Items)',
-    state.data.items || [],
-    enemy.drops || [],
-    (vals) => updateEnemy(enemy, 'drops', vals)
-  ));
-
-  card.appendChild(eventArea('On Attack', enemy.hooks?.on_attack || [], (val) => updateEnemyHook(enemy, 'on_attack', val)));
-  card.appendChild(eventArea('On Hit', enemy.hooks?.on_hit || [], (val) => updateEnemyHook(enemy, 'on_hit', val)));
-  card.appendChild(eventArea('On Miss', enemy.hooks?.on_miss || [], (val) => updateEnemyHook(enemy, 'on_miss', val)));
-  card.appendChild(eventArea('On Defeat', enemy.hooks?.on_defeat || [], (val) => updateEnemyHook(enemy, 'on_defeat', val)));
-
-  const actions = document.createElement('div');
-  actions.style.display = 'flex';
-  actions.style.gap = '10px';
-  const del = document.createElement('button');
-  del.className = 'danger';
-  del.textContent = 'Gegner löschen';
-  del.onclick = () => deleteEnemy(enemy.id);
-  actions.appendChild(del);
-  card.appendChild(actions);
-
-  viewEl.appendChild(card);
-}
-
-function renderNpcView() {
-  const npc = findActor('npc', state.selection.npcId);
-  if (!npc) return;
-  ensureDialogForNpc(state.data, npc.id);
-  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> NPC: ${npc.id}</div>`;
-  const card = renderNpcEditor(npc, {
+function renderActorView() {
+  const actor = getSelectedActor();
+  if (!actor) return;
+  if (actor.type === 'npc') ensureDialogForNpc(state.data, actor.id);
+  const label = actor.type === 'enemy' ? 'Gegner' : 'NPC';
+  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> ${label}: ${actor.id}</div>`;
+  const card = renderActorEditor(actor, {
     rooms: state.data.rooms || [],
     dialogs: state.data.dialogs || {},
-    setDirty,
-    onDelete: deleteNpc,
+    asciiFiles: state.asciiFiles || [],
+    items: state.data.items || [],
+    widgets: { eventArea, multiselectField },
+    onUpdateActor: (key, value) => updateActor(actor, key, value),
+    onUpdateEnemyStat: (key, value) => updateEnemyStat(actor, key, value),
+    onUpdateEnemyBehavior: (key, value) => updateEnemyBehavior(actor, key, value),
+    onUpdateEnemyAscii: (key, value) => updateEnemyAscii(actor, key, value),
+    onUpdateEnemyHook: (key, value) => updateEnemyHook(actor, key, value),
+    onDelete: deleteActor,
     onOpenDialog: (id) => {
       ensureDialogForNpc(state.data, id);
-      state.selection = defaultSelection({ view: 'dialog', dialogId: id, dialogNodeId: null, npcId: id });
+      state.selection = defaultSelection({ view: 'dialog', dialogId: id, dialogNodeId: null, actorId: id, actorType: actor.type });
       renderEditor();
       renderSidebar();
     },
@@ -1040,8 +960,9 @@ function renderNpcView() {
 }
 
 function renderDialogView() {
-  const dialogId = state.selection.dialogId || state.selection.npcId;
-  if (!dialogId) return;
+  const dialogId = state.selection.dialogId || state.selection.actorId;
+  const actor = dialogId ? findActorById(dialogId) : null;
+  if (!dialogId || (actor && actor.type !== 'npc')) return;
   const dialog = ensureDialogForNpc(state.data, dialogId);
   const mode = state.selection.dialogMode || 'editor';
   const graph = dialogGraphInfo(dialog);
@@ -1105,7 +1026,7 @@ function renderDialogView() {
       adventure: state.data,
       npcId: dialogId,
       selection: state.selection,
-      setSelection: (sel) => { state.selection = { ...state.selection, ...sel }; renderEditor(); },
+      setSelection: (sel) => { state.selection = { ...state.selection, ...sel, actorId: dialogId, actorType: 'npc' }; renderEditor(); },
       setDirty,
       createEventEditor,
       asciiFiles: state.asciiFiles || [],
@@ -1866,6 +1787,16 @@ function updateObject(obj, key, value) {
   setDirty(true);
 }
 
+function updateActor(actor, key, value) {
+  const nextValue = key === 'id' ? (slugify(String(value)) || actor.id) : value;
+  const previousId = actor.id;
+  actor[key] = nextValue;
+  if (key === 'id' && state.selection.actorId === previousId) {
+    state.selection = { ...state.selection, actorId: nextValue };
+  }
+  setDirty(true);
+}
+
 function updateEnemy(enemy, key, value) {
   enemy[key] = value;
   setDirty(true);
@@ -1976,44 +1907,26 @@ function deleteObject(id) {
   renderEditor();
 }
 
-function addEnemy() {
-  const id = prompt('Neue Gegner-ID:');
-  if (!id) return;
-  const enemy = { id, type: 'enemy', name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], hooks: { on_attack: [], on_hit: [], on_miss: [], on_defeat: [] } };
-  state.data.actors = state.data.actors || [];
-  state.data.actors.push(enemy);
-  state.selection = defaultSelection({ view: 'enemy', enemyId: id });
-  setDirty(true);
-  renderSidebar();
-  renderEditor();
-}
-
-function deleteEnemy(id) {
-  if (!confirm('Gegner wirklich löschen?')) return;
-  state.data.actors = (state.data.actors || []).filter(actor => !(actor.type === 'enemy' && actor.id === id));
-  state.selection = defaultSelection({ view: 'world' });
-  setDirty(true);
-  renderSidebar();
-  renderEditor();
-}
-
-function addNpc() {
-  ensureNpcCollection(state.data);
-  const name = prompt('Name des NPCs:');
+function addActor(type) {
+  ensureActorCollection(state.data);
+  const label = type === 'enemy' ? 'Gegner' : 'NPC';
+  const name = prompt(`${label}-Name oder ID:`);
   if (!name) return;
-  const npc = createNpcDraft(name);
-  state.data.actors.push(npc);
-  ensureDialogForNpc(state.data, npc.id);
-  state.selection = defaultSelection({ view: 'npc', npcId: npc.id });
+  const actor = createActorDraft(type, name);
+  state.data.actors.push(actor);
+  if (actor.type === 'npc') ensureDialogForNpc(state.data, actor.id);
+  state.selection = defaultSelection({ view: 'actor', actorId: actor.id, actorType: actor.type });
   setDirty(true);
   renderSidebar();
   renderEditor();
 }
 
-function deleteNpc(id) {
-  if (!confirm('NPC wirklich löschen?')) return;
-  state.data.actors = (state.data.actors || []).filter(actor => !(actor.type === 'npc' && actor.id === id));
-  if (state.data.dialogs) delete state.data.dialogs[id];
+function deleteActor(id) {
+  const actor = findActorById(id);
+  const label = actor?.type === 'enemy' ? 'Gegner' : 'NPC';
+  if (!actor || !confirm(`${label} wirklich löschen?`)) return;
+  state.data.actors = (state.data.actors || []).filter(a => a.id !== id);
+  if (actor.type === 'npc' && state.data.dialogs) delete state.data.dialogs[id];
   state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
   renderSidebar();
@@ -2311,7 +2224,6 @@ function applyExitLockingMetaToRooms(adventureData) {
 }
 
 function prepareAdventureForSave(data) {
-  ensureNpcCollection(data);
   ensureDialogState(data);
   ensureActorCollection(data);
   const cloned = JSON.parse(JSON.stringify(data));
