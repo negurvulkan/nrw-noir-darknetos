@@ -938,7 +938,13 @@ async function showRoom(firstTime = false, options = {}) {
   }
   const actorsInRoom = await listActorsInRoom(room.id);
   if (actorsInRoom.length) {
-    const labels = actorsInRoom.map(({ actor, qty }) => `${actor.name || actor.id}${qty > 1 ? ` x${qty}` : ''}`);
+    const labels = actorsInRoom.map(({ actor, qty }) => {
+      const name = actor.name || actor.id;
+      const qtyLabel = qty > 1 ? ` x${qty}` : '';
+      const hostile = actor.combat?.enabled || actor.type === 'enemy';
+      const hostileLabel = hostile ? ' [feindlich]' : '';
+      return `${name}${qtyLabel}${hostileLabel}`;
+    });
     lines.push('Akteure: ' + labels.join(', '));
   }
   const exits = Object.keys(room.exits || {});

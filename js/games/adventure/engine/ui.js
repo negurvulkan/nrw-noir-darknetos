@@ -54,12 +54,16 @@ export function renderStatus(state) {
   const hpText = maxHp ? `${Math.max(hp, 0)}/${maxHp}` : hp;
   const guard = state.combat?.defending ? ' (Verteidigung)' : '';
   let status = `[${state.location}]  HP ${hpText}  ⚔ ${atk}  🛡 ${def}${guard}`;
-  if (state.inCombat && state.enemy) {
-    const enemyHp = Math.max(state.enemy.stats?.hp ?? 0, 0);
-    const enemyDef = state.enemy.stats?.defense ?? '-';
-    const enemyAtk = state.enemy.stats?.attack ?? '-';
-    const enemyLabel = state.enemy.name || state.enemy.id || 'Gegner';
-    status += `  | Gegner: ${enemyLabel} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
+  if (state.inCombat) {
+    const combatant = state.actor || state.enemy;
+    if (combatant) {
+      const stats = combatant.stats || {};
+      const enemyHp = Math.max(stats.hp ?? combatant.hp ?? 0, 0);
+      const enemyDef = stats.defense ?? combatant.defense ?? '-';
+      const enemyAtk = stats.attack ?? combatant.attack ?? '-';
+      const enemyLabel = combatant.name || combatant.id || 'Gegner';
+      status += `  | Gegner: ${enemyLabel} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
+    }
   }
 
   advStatusEl.textContent = status;
