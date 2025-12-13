@@ -72,6 +72,53 @@ function defaultSelection(overrides = {}) {
   };
 }
 
+function ensureActorCollection(data) {
+  if (!data.actors) data.actors = [];
+  return data.actors;
+}
+
+function migrateLegacyActors(data) {
+  ensureActorCollection(data);
+  const existingIds = new Set(data.actors.map(actor => actor.id));
+  (data.enemies || []).forEach(enemy => {
+    if (!existingIds.has(enemy.id)) {
+      data.actors.push({ ...enemy, type: 'enemy' });
+    }
+  });
+  (data.npcs || []).forEach(npc => {
+    if (!existingIds.has(npc.id)) {
+      data.actors.push({ ...npc, type: 'npc' });
+    }
+  });
+  return data.actors;
+}
+
+function normalizeActor(actor, options = {}) {
+  if (!actor.type) {
+    actor.type = (actor.behavior || actor.stats) ? 'enemy' : 'npc';
+  }
+  if (actor.type === 'enemy') normalizeEnemyHooks(actor, options);
+  if (actor.type === 'npc') {
+    actor.dialog_start = actor.dialog_start || 'start';
+  }
+  return actor;
+}
+
+function normalizeActors(data, options = {}) {
+  migrateLegacyActors(data);
+  data.actors = data.actors.map(actor => normalizeActor(actor, options));
+  return data.actors;
+}
+
+function actorsByType(type) {
+  return (state.data?.actors || []).filter(actor => actor.type === type);
+}
+
+function findActor(type, id) {
+  if (!id) return null;
+  return actorsByType(type).find(actor => actor.id === id) || null;
+}
+
 async function initAiAssist() {
   if (!aiButton) return;
   aiButton.disabled = true;
@@ -280,7 +327,10 @@ function buildAiPayload(mode, options) {
 }
 
 function existingIdsFor(entityType) {
-  const map = { room: 'rooms', item: 'items', object: 'objects', npc: 'npcs', enemy: 'enemies' };
+  if (entityType === 'npc' || entityType === 'enemy') {
+    return actorsByType(entityType).map(actor => actor.id).filter(Boolean);
+  }
+  const map = { room: 'rooms', item: 'items', object: 'objects' };
   const key = map[entityType];
   if (!key || !state.data) return [];
   return (state.data[key] || []).map(e => e.id).filter(Boolean);
@@ -304,10 +354,6 @@ function normalizeEnemyHooks(enemy, options = {}) {
     delete enemy.on_defeat;
   }
   return enemy;
-}
-
-function normalizeEnemies(data, options = {}) {
-  (data.enemies || []).forEach(enemy => normalizeEnemyHooks(enemy, options));
 }
 
 function currentEntityType() {
@@ -354,7 +400,9 @@ function eventTargets() {
 
 function getSelectedEntity(entityType) {
   if (!state.data) return null;
-  const map = { room: { key: 'rooms', sel: 'roomId' }, item: { key: 'items', sel: 'itemId' }, object: { key: 'objects', sel: 'objectId' }, npc: { key: 'npcs', sel: 'npcId' }, enemy: { key: 'enemies', sel: 'enemyId' } };
+  const map = { room: { key: 'rooms', sel: 'roomId' }, item: { key: 'items', sel: 'itemId' }, object: { key: 'objects', sel: 'objectId' } };
+  if (entityType === 'npc') return findActor('npc', state.selection.npcId);
+  if (entityType === 'enemy') return findActor('enemy', state.selection.enemyId);
   const info = map[entityType];
   if (!info) return null;
   const id = state.selection[info.sel];
@@ -544,9 +592,11 @@ async function openAdventure(id) {
     const res = await Api.loadAdventure(id);
     state.currentAdventure = res.adventure || state.adventures.find(a => a.id === id) || { id };
     state.data = res.data || res;
-    state.data.enemies = state.data.enemies || [];
-    normalizeEnemies(state.data);
+    ensureActorCollection(state.data);
+    normalizeActors(state.data);
     ensureNpcCollection(state.data);
+    state.data.enemies = [];
+    state.data.npcs = [];
     ensureDialogState(state.data);
     state.asciiFiles = res.ascii || res.asciiFiles || [];
     state.selection = defaultSelection();
@@ -624,7 +674,7 @@ function renderSidebar() {
   sidebar.appendChild(sectionTitle('Gegner'));
   const enemyList = document.createElement('div');
   enemyList.className = 'nav-list';
-  (state.data.enemies || []).forEach(enemy => {
+  actorsByType('enemy').forEach(enemy => {
     const row = document.createElement('div');
     row.className = 'nav-item' + (state.selection.enemyId === enemy.id ? ' active' : '');
     row.textContent = enemy.name || enemy.id;
@@ -640,7 +690,7 @@ function renderSidebar() {
 
   renderNpcSidebar({
     container: sidebar,
-    state,
+    actors: actorsByType('npc'),
     selection: state.selection,
     onSelect: (id) => { state.selection = defaultSelection({ view: 'npc', npcId: id }); renderEditor(); renderSidebar(); },
     onAdd: addNpc,
@@ -888,7 +938,7 @@ function renderObjectEditor() {
 }
 
 function renderEnemyEditor() {
-  const enemy = (state.data.enemies || []).find(e => e.id === state.selection.enemyId);
+  const enemy = findActor('enemy', state.selection.enemyId);
   if (!enemy) return;
   viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> Gegner: ${enemy.id}</div>`;
   const card = document.createElement('div');
@@ -970,7 +1020,7 @@ function renderEnemyEditor() {
 }
 
 function renderNpcView() {
-  const npc = (state.data.npcs || []).find(n => n.id === state.selection.npcId);
+  const npc = findActor('npc', state.selection.npcId);
   if (!npc) return;
   ensureDialogForNpc(state.data, npc.id);
   viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> NPC: ${npc.id}</div>`;
@@ -1890,10 +1940,11 @@ function deleteItem(id) {
     ...room,
     items: (room.items || []).filter(itemId => itemId !== id)
   }));
-  state.data.enemies = (state.data.enemies || []).map(enemy => ({
-    ...enemy,
-    drops: (enemy.drops || []).filter(dropId => dropId !== id),
-  }));
+  state.data.actors = (state.data.actors || []).map(actor => (
+    actor.type === 'enemy'
+      ? { ...actor, drops: (actor.drops || []).filter(dropId => dropId !== id) }
+      : actor
+  ));
   setDirty(true);
   state.selection = defaultSelection({ view: 'world' });
   renderSidebar();
@@ -1928,9 +1979,9 @@ function deleteObject(id) {
 function addEnemy() {
   const id = prompt('Neue Gegner-ID:');
   if (!id) return;
-  const enemy = { id, name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], hooks: { on_attack: [], on_hit: [], on_miss: [], on_defeat: [] } };
-  state.data.enemies = state.data.enemies || [];
-  state.data.enemies.push(enemy);
+  const enemy = { id, type: 'enemy', name: id, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], hooks: { on_attack: [], on_hit: [], on_miss: [], on_defeat: [] } };
+  state.data.actors = state.data.actors || [];
+  state.data.actors.push(enemy);
   state.selection = defaultSelection({ view: 'enemy', enemyId: id });
   setDirty(true);
   renderSidebar();
@@ -1939,7 +1990,7 @@ function addEnemy() {
 
 function deleteEnemy(id) {
   if (!confirm('Gegner wirklich löschen?')) return;
-  state.data.enemies = (state.data.enemies || []).filter(e => e.id !== id);
+  state.data.actors = (state.data.actors || []).filter(actor => !(actor.type === 'enemy' && actor.id === id));
   state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
   renderSidebar();
@@ -1951,7 +2002,7 @@ function addNpc() {
   const name = prompt('Name des NPCs:');
   if (!name) return;
   const npc = createNpcDraft(name);
-  state.data.npcs.push(npc);
+  state.data.actors.push(npc);
   ensureDialogForNpc(state.data, npc.id);
   state.selection = defaultSelection({ view: 'npc', npcId: npc.id });
   setDirty(true);
@@ -1961,7 +2012,7 @@ function addNpc() {
 
 function deleteNpc(id) {
   if (!confirm('NPC wirklich löschen?')) return;
-  state.data.npcs = (state.data.npcs || []).filter(n => n.id !== id);
+  state.data.actors = (state.data.actors || []).filter(actor => !(actor.type === 'npc' && actor.id === id));
   if (state.data.dialogs) delete state.data.dialogs[id];
   state.selection = defaultSelection({ view: 'world' });
   setDirty(true);
@@ -2262,10 +2313,12 @@ function applyExitLockingMetaToRooms(adventureData) {
 function prepareAdventureForSave(data) {
   ensureNpcCollection(data);
   ensureDialogState(data);
-  data.enemies = data.enemies || [];
+  ensureActorCollection(data);
   const cloned = JSON.parse(JSON.stringify(data));
   applyExitLockingMetaToRooms(cloned);
-  normalizeEnemies(cloned, { removeLegacy: true });
+  normalizeActors(cloned, { removeLegacy: true });
+  cloned.enemies = [];
+  cloned.npcs = [];
   return cloned;
 }
 
@@ -2279,8 +2332,7 @@ async function saveCurrent() {
       rooms: prepared.rooms,
       items: prepared.items,
       objects: prepared.objects,
-      enemies: prepared.enemies,
-      npcs: prepared.npcs,
+      actors: prepared.actors,
       dialogs: prepared.dialogs,
     });
     toast('Adventure gespeichert', 'success');
