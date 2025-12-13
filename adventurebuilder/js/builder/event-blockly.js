@@ -88,7 +88,11 @@ function registerBlocks() {
   Blockly.Blocks.event_add_item = {
     init() {
       this.setStyle('event_blocks');
-      this.appendDummyInput().appendField('Item hinzufügen').appendField(new Blockly.FieldTextInput('item_id'), 'ID');
+      this.appendDummyInput()
+        .appendField('Item hinzufügen')
+        .appendField(new Blockly.FieldTextInput('item_id'), 'ID')
+        .appendField('Menge')
+        .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
       this.setPreviousStatement(true);
       this.setNextStatement(true);
     },
@@ -97,7 +101,11 @@ function registerBlocks() {
   Blockly.Blocks.event_remove_item = {
     init() {
       this.setStyle('event_blocks');
-      this.appendDummyInput().appendField('Item entfernen').appendField(new Blockly.FieldTextInput('item_id'), 'ID');
+      this.appendDummyInput()
+        .appendField('Item entfernen')
+        .appendField(new Blockly.FieldTextInput('item_id'), 'ID')
+        .appendField('Menge')
+        .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
       this.setPreviousStatement(true);
       this.setNextStatement(true);
     },
@@ -192,9 +200,17 @@ function blockToEvent(block) {
     case 'event_flag_set':
       return { type: 'flag_set', key: block.getFieldValue('KEY') || '', value: block.getFieldValue('VALUE') === 'TRUE' };
     case 'event_add_item':
-      return { type: 'add_item', id: block.getFieldValue('ID') || '' };
+      return {
+        type: 'add_item',
+        id: block.getFieldValue('ID') || '',
+        qty: Number(block.getFieldValue('QTY')) || 1,
+      };
     case 'event_remove_item':
-      return { type: 'remove_item', id: block.getFieldValue('ID') || '' };
+      return {
+        type: 'remove_item',
+        id: block.getFieldValue('ID') || '',
+        qty: Number(block.getFieldValue('QTY')) || 1,
+      };
     case 'event_unlock_exit':
       return { type: 'unlock_exit', room: block.getFieldValue('ROOM') || '', direction: block.getFieldValue('DIR') || '' };
     case 'event_lock_exit':
@@ -249,10 +265,12 @@ function buildBlockForEvent(event, workspace) {
     case 'add_item':
       block = workspace.newBlock('event_add_item');
       block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(String(event.qty || 1), 'QTY');
       break;
     case 'remove_item':
       block = workspace.newBlock('event_remove_item');
       block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(String(event.qty || 1), 'QTY');
       break;
     case 'unlock_exit':
       block = workspace.newBlock('event_unlock_exit');

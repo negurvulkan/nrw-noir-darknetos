@@ -7,6 +7,45 @@ const MIN_PLAYER_DAMAGE = 1;
 const MIN_ENEMY_DAMAGE = 0;
 const DEFAULT_FLEE_DIFFICULTY = 0.45;
 
+function normalizeIdLocal(str = '') {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss');
+}
+
+function inventoryIds(state) {
+  return (state.inventory || [])
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean);
+}
+
+function findInventoryMatch(state, query) {
+  const normalizedQuery = normalizeIdLocal(query);
+  if (!normalizedQuery) return null;
+  const ids = inventoryIds(state);
+  const exact = ids.find((id) => normalizeIdLocal(id) === normalizedQuery);
+  if (exact) return exact;
+  return ids.find((id) => normalizeIdLocal(id).includes(normalizedQuery)) || null;
+}
+
+function getQuantity(state, id) {
+  const normalized = normalizeIdLocal(id);
+  const entry = (state.inventory || []).find((inv) => normalizeIdLocal(inv?.id || inv) === normalized);
+  if (!entry) return 0;
+  return typeof entry === 'string' ? 1 : (entry.qty || 0);
+}
+
+function formatItemLabel(item, qty = 1) {
+  const name = item?.name || item?.id || 'Item';
+  const unit = item?.unit ? ` ${item.unit}` : '';
+  return item?.stackable || qty > 1 ? `${name} x${qty}${unit}` : name;
+}
+
 function getEnemyHooks(enemy) {
   const hooks = enemy.hooks && typeof enemy.hooks === 'object' ? enemy.hooks : {};
   return {
@@ -194,22 +233,14 @@ async function handleVictory(enemy, state, ctx) {
   const drops = enemy.drops || [];
   for (const drop of drops) {
     if (!drop) continue;
-    if (!ctx.loadItem) {
-      if (!state.inventory.includes(drop)) {
-        state.inventory.push(drop);
-        advLog([`Du erhältst ${drop}.`]);
-      }
-      // eslint-disable-next-line no-continue
-      continue;
-    }
-
     try {
       // eslint-disable-next-line no-await-in-loop
       const item = await ctx.loadItem(drop);
       const itemId = item.id || drop;
-      if (!state.inventory.includes(itemId)) {
-        state.inventory.push(itemId);
-        advLog([`Du erhältst ${item.name || itemId}.`]);
+      const added = ctx?.addToInventory ? await ctx.addToInventory(itemId, 1) : 0;
+      if (added > 0) {
+        const total = ctx?.getInvQty ? ctx.getInvQty(itemId) : getQuantity(state, itemId);
+        advLog([`Du erhältst ${formatItemLabel(item, total)}.`]);
       }
     } catch (err) {
       advLog([`Beute konnte nicht geladen werden (${drop}).`]);
@@ -246,9 +277,9 @@ async function handleCombatItemUse(action, state, ctx) {
     advLog(['Welches Item möchtest du im Kampf nutzen?']);
     return;
   }
-  const normalizedRequest = (action.object || '').toLowerCase();
-  const match = (state.inventory || []).find((id) => id.toLowerCase() === normalizedRequest);
-  if (!match) {
+  const match = findInventoryMatch(state, action.object);
+  const qty = match ? (ctx?.getInvQty ? ctx.getInvQty(match) : getQuantity(state, match)) : 0;
+  if (!match || qty <= 0) {
     advLog(['Du besitzt dieses Item nicht.']);
     return;
   }
@@ -299,9 +330,10 @@ async function handleCombatItemUse(action, state, ctx) {
 
   const consume = effect ? effect.consume !== false : weaponConsume;
   if (consume) {
-    const idx = state.inventory.indexOf(item.id);
-    if (idx !== -1) {
-      state.inventory.splice(idx, 1);
+    const removed = ctx?.removeFromInventory ? ctx.removeFromInventory(item.id, 1) : 0;
+    if (!removed) {
+      advLog(['Du besitzt dieses Item nicht mehr.']);
+      return;
     }
   }
 

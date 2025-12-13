@@ -147,6 +147,93 @@ function clone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function normalizeInventoryEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'string') return { id: entry, qty: 1 };
+  const id = entry.id || entry.item || null;
+  if (!id) return null;
+  const qty = Number.isFinite(entry.qty) && entry.qty > 0 ? entry.qty : 1;
+  return { id, qty };
+}
+
+function migrateInventory(raw = []) {
+  if (!Array.isArray(raw)) return [];
+  const aggregated = new Map();
+  raw.forEach((entry) => {
+    const normalized = normalizeInventoryEntry(entry);
+    if (!normalized) return;
+    const prev = aggregated.get(normalized.id) || 0;
+    aggregated.set(normalized.id, prev + normalized.qty);
+  });
+  return Array.from(aggregated.entries()).map(([id, qty]) => ({ id, qty }));
+}
+
+function getInventoryEntries() {
+  if (!Array.isArray(state.inventory)) return [];
+  state.inventory = migrateInventory(state.inventory);
+  return state.inventory;
+}
+
+function findInventoryEntry(id) {
+  const normalized = normalizeId(id);
+  return getInventoryEntries().find((entry) => normalizeId(entry.id) === normalized) || null;
+}
+
+function getInventoryIds() {
+  return getInventoryEntries()
+    .map((entry) => entry.id)
+    .filter(Boolean);
+}
+
+function getInvQty(id) {
+  const entry = findInventoryEntry(id);
+  return entry?.qty || 0;
+}
+
+async function addToInventory(id, qty = 1) {
+  state.inventory = migrateInventory(getInventoryEntries());
+  const amount = Number.isFinite(qty) ? qty : 1;
+  if (amount <= 0) return 0;
+  const item = await loadItem(id);
+  const itemId = item.id || id;
+  const stackable = item.stackable === true;
+  const maxStack = Number.isFinite(item.maxStack) && item.maxStack > 0 ? item.maxStack : Infinity;
+
+  if (!stackable) {
+    if (!findInventoryEntry(itemId)) {
+      state.inventory.push({ id: itemId, qty: 1 });
+      return 1;
+    }
+    return 0;
+  }
+
+  const entry = findInventoryEntry(itemId) || { id: itemId, qty: 0 };
+  if (!findInventoryEntry(itemId)) {
+    state.inventory.push(entry);
+  }
+  const before = entry.qty;
+  entry.qty = Math.min(maxStack, entry.qty + amount);
+  return entry.qty - before;
+}
+
+function removeFromInventory(id, qty = 1) {
+  state.inventory = migrateInventory(getInventoryEntries());
+  const entry = findInventoryEntry(id);
+  const amount = Number.isFinite(qty) ? qty : 1;
+  if (!entry || amount <= 0) return 0;
+  if (entry.qty < amount) return 0;
+  if (entry.qty === amount) {
+    state.inventory = getInventoryEntries().filter((inv) => normalizeId(inv.id) !== normalizeId(id));
+    return amount;
+  }
+  entry.qty -= amount;
+  return amount;
+}
+
+function hasInventoryItem(id) {
+  return getInvQty(id) > 0;
+}
+
 async function loadRoom(id) {
   if (!cache.rooms[id]) {
     cache.rooms[id] = await loadJson(`rooms/${id}.json`);
@@ -308,6 +395,7 @@ function loadStateFromSave() {
     const saved = JSON.parse(raw);
     state = createEmptyState();
     Object.assign(state, saved);
+    state.inventory = migrateInventory(state.inventory);
     if (!state.stats) {
       state.stats = { ...defaultStats };
     }
@@ -349,9 +437,12 @@ function normalizeId(str) {
 function findMatchByNormalized(list = [], query = '') {
   const normalizedQuery = normalizeId(query);
   if (!normalizedQuery) return null;
-  const exact = list.find((id) => normalizeId(id) === normalizedQuery);
+  const ids = list
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean);
+  const exact = ids.find((id) => normalizeId(id) === normalizedQuery);
   if (exact) return exact;
-  return list.find((id) => normalizeId(id).includes(normalizedQuery)) || null;
+  return ids.find((id) => normalizeId(id).includes(normalizedQuery)) || null;
 }
 
 function flagMatches(condition) {
@@ -361,7 +452,7 @@ function flagMatches(condition) {
 
 function inventoryMatches(list = []) {
   if (!Array.isArray(list) || !list.length) return true;
-  return list.every((itemId) => state.inventory.includes(itemId));
+  return list.every((itemId) => getInvQty(itemId) > 0);
 }
 
 function choiceHidden(choice = {}) {
@@ -389,15 +480,31 @@ function buildVisibleChoices(node = {}) {
   return visible;
 }
 
-function describeInventory() {
+async function describeInventory() {
   ensureAdventureUI();
-  if (!state.inventory.length) {
+  const entries = getInventoryEntries();
+  if (!entries.length) {
     advLog(['Dein Inventar ist leer.']);
     return;
   }
   const lines = ['Inventar:'];
-  state.inventory.forEach((id) => lines.push(`- ${id}`));
+  const items = await Promise.all(entries.map((entry) => loadItem(entry.id).catch(() => null)));
+  items.forEach((item, idx) => {
+    const entry = entries[idx];
+    const label = item ? formatInventoryLine(item, entry.qty) : `${entry.id} x${entry.qty}`;
+    lines.push(`- ${label}`);
+  });
   advLog(lines);
+}
+
+function formatInventoryLine(item, qty = 1) {
+  const name = item?.name || item?.id || 'Item';
+  const unit = item?.unit ? ` ${item.unit}` : '';
+  const amount = Number.isFinite(qty) ? qty : 1;
+  if (item?.stackable || amount > 1) {
+    return `${name} x${amount}${unit}`;
+  }
+  return name;
 }
 
 async function showRoom(firstTime = false) {
@@ -448,6 +555,9 @@ function ctxForEvents() {
     startCombat: async (enemyId) => startCombat(enemyId, state, ctxForEvents()),
     loadEnemy,
     loadItem,
+    getInvQty: (id) => getInvQty(id),
+    addToInventory: async (id, qty = 1) => addToInventory(id, qty),
+    removeFromInventory: (id, qty = 1) => removeFromInventory(id, qty),
     startDialog: async (npcId, nodeId = null) => startDialogWithNpc(npcId, nodeId),
     endDialog: () => endDialog(),
     gotoDialogNode: async (nodeId) => gotoDialogNode(nodeId),
@@ -494,11 +604,13 @@ async function performTake(action) {
     advLog(['Das lässt sich nicht mitnehmen.']);
     return;
   }
-  room.items = available.filter((i) => i !== match);
-  if (!state.inventory.includes(item.id)) {
-    state.inventory.push(item.id);
+  const added = await addToInventory(item.id, 1);
+  if (!added) {
+    advLog(['Du kannst das nicht mehr tragen.']);
+    return;
   }
-  advLog([`Du nimmst ${item.name}.`]);
+  room.items = available.filter((i) => i !== match);
+  advLog([`Du nimmst ${formatInventoryLine(item, getInvQty(item.id))}.`]);
   saveState();
 }
 
@@ -523,7 +635,7 @@ async function performInspect(action) {
     const lines = [`${obj.name}: ${obj.description}`];
     advLog(lines);
     await runEvents(obj.inspect || [], state, ctxForEvents());
-  } else if (room.items.includes(match) || state.inventory.includes(match)) {
+  } else if (room.items.includes(match) || hasInventoryItem(match)) {
     const item = await loadItem(match);
     advLog([`${item.name}: ${item.description}`]);
   }
@@ -546,7 +658,7 @@ async function performUse(action) {
     return;
   }
   const itemMatch = findMatchByNormalized(state.inventory, action.object);
-  if (itemMatch) {
+  if (itemMatch && getInvQty(itemMatch) > 0) {
     const item = await loadItem(itemMatch);
     await runEvents(item.on_use || [], state, ctxForEvents());
     return;
@@ -558,7 +670,7 @@ async function performCombine(action) {
   const sourceId = normalizeId(action.object || '');
   const targetId = normalizeId(action.target || '');
   const match = findMatchByNormalized(state.inventory, action.object);
-  if (!match) {
+  if (!match || getInvQty(match) <= 0) {
     advLog(['Dir fehlt ein benötigtes Item.']);
     return;
   }
@@ -761,7 +873,7 @@ async function handleAction(action) {
       await performCombine(action);
       break;
     case 'inventory':
-      describeInventory();
+      await describeInventory();
       break;
     case 'help':
       printHelp();
