@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.3.0
+Version 1.4.0
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -14,10 +14,17 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 
 - `/js/core/` – Terminal-Runtime (Routing, Content-Lader, Login, Init).
 - `/js/games/` – Game Hub, TicTacToe sowie Adventure Runtime/Commands.
-- `/js/games/adventure/adventures/` – einzige Quelle für Adventure-Pakete (z. B. `default/`, `dunkler-wald/`).
+- `/js/games/adventure/adventures/` – einzige Quelle für Adventure-Pakete (z. B. `default/`, `dunkler-wald/`). NPCs und Gegner
+  werden dort als `actors/*.json` mit `type`-Feld geführt; Legacy-Verzeichnisse `npcs/` und `enemies/` bleiben lesbar.
 - `/content/` – JSON-Content für Terminalbefehle (`index.json`, `motd.json`, etc.).
 - `/adventurebuilder/` – UI-Assets & Blockly-Glue für den Adventure Builder.
 - `/content-builder/` – PHP-Backend & JSON-Builder/API.
+
+## Neu in 1.4.0
+
+- Vereinheitlichtes Actor-System: NPCs und Gegner teilen sich eine zentrale `actors`-Sammlung, einen Editor-Flow und konsolidierte
+  API-Endpunkte im Content-/Adventure-Builder. Datensätze tragen ein `type`-Feld (`npc`/`enemy`) und werden beim Laden automatisch
+  auf die gemeinsame Struktur gemappt.
 
 ## Neu in 1.3.0
 

@@ -1,11 +1,13 @@
 # NRW Noir Adventure Engine
 
-## Gegner (`enemies/*.json`)
+## Actors – Gegner (`actors/*.json` mit `type: "enemy"`)
 
-Gegnerdaten steuern Kämpfe und Beute.
+Gegnerdaten steuern Kämpfe und Beute. Sie liegen in der gemeinsamen Actor-Sammlung und werden beim Laden über ihr `type`-Feld
+als Gegner erkannt. Legacy-Dateien unter `enemies/*.json` werden weiterhin eingelesen und in Actors überführt.
 
 ### Pflichtfelder
 - **id**: Eindeutige Kennung.
+- **type**: Muss `enemy` sein, wenn der Datensatz unter `actors/` liegt.
 - **name**: Gegnername.
 - **description**: Kurzbeschreibung.
 - **stats**: Werteobjekt mit `hp`, `attack`, `defense`.
@@ -20,6 +22,7 @@ Gegnerdaten steuern Kämpfe und Beute.
 ```json
 {
   "id": "shadow_beast",
+  "type": "enemy",
   "name": "Schattenbestie",
   "ascii": { "file": "ascii/beast.txt", "fontSize": 5 },
   "description": "Etwas bewegt sich im Dunkeln.",

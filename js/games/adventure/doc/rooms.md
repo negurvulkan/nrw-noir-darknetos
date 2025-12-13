@@ -14,8 +14,8 @@ Räume beschreiben Umgebung, Ausgänge und Inhalte.
 - **ascii**: `{ "file": "ascii/datei.txt", "fontSize": 6 }` für ASCII-Art.
 - **objects**: Array von Objekt-IDs, die im Raum stehen.
 - **items**: Array von Item-IDs, die aufgenommen werden können.
-- **enemies**: Gegner-IDs, die beim Betreten in Kämpfe münden können.
-- **npcs**: Liste von NPC-IDs, falls Personen fest im Raum stehen.
+- **actors**: Liste von Actor-IDs (NPCs oder Gegner mit `type`-Feld), die fest im Raum stehen oder in Kämpfe münden.
+  Legacy-Felder `enemies` und `npcs` werden weiterhin eingelesen und im Loader auf Actors abgebildet.
 - **on_enter**: Eventliste, die bei JEDEM Betreten ausgeführt wird.
 - **on_first_enter**: Eventliste, die nur beim ersten Besuch läuft.
 
@@ -29,8 +29,7 @@ Räume beschreiben Umgebung, Ausgänge und Inhalte.
   "exits": { "nord": "flur" },
   "objects": ["konsole_main"],
   "items": ["schluesselkarte"],
-  "enemies": [],
-  "npcs": [],
+  "actors": ["hausmeister", "geist"],
   "on_enter": [],
   "on_first_enter": []
 }
