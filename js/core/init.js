@@ -4,7 +4,7 @@
 
 function printWelcome() {
   printLines([
-    `Willkommen im NRW Noir Darknetz, ${getUserName()}.`,
+    `Willkommen im NRW Noir Darknet, ${getUserName()}.`,
     "Tippe 'help' für eine Liste der verfügbaren Befehle.",
     ""
   ], "dim");
