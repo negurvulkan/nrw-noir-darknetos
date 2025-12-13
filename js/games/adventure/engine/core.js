@@ -40,13 +40,16 @@ const createEmptyState = () => ({
   location: null,
   inventory: [],
   flags: {},
+  counters: {},
   stats: { ...defaultStats },
   inCombat: false,
   enemy: null,
   combat: { defending: false, enemyStartHp: null },
   visited: {},
   lockedExits: {},
+  roomSpawns: {},
   npcFlags: {},
+  npcs: {},
   dialog: { active: false, npcId: null, nodeId: null }
 });
 
@@ -239,6 +242,108 @@ function hasInventoryItem(id) {
   return getInvQty(id) > 0;
 }
 
+function ensureCounterState() {
+  if (!state.counters || typeof state.counters !== 'object') {
+    state.counters = {};
+  }
+  return state.counters;
+}
+
+function getCounter(key) {
+  return ensureCounterState()[key] || 0;
+}
+
+function addCounter(key, amount = 1) {
+  if (!key) return getCounter(key);
+  const counters = ensureCounterState();
+  const delta = Number.isFinite(amount) ? amount : 1;
+  counters[key] = (counters[key] || 0) + delta;
+  return counters[key];
+}
+
+function setCounter(key, value = 0) {
+  if (!key) return getCounter(key);
+  const counters = ensureCounterState();
+  const val = Number.isFinite(value) ? value : 0;
+  counters[key] = val;
+  return counters[key];
+}
+
+function ensureRoomSpawn(roomId) {
+  if (!state.roomSpawns || typeof state.roomSpawns !== 'object') {
+    state.roomSpawns = {};
+  }
+  const key = normalizeId(roomId);
+  if (!state.roomSpawns[key]) {
+    state.roomSpawns[key] = { items: [], enemies: [], npcs: [] };
+  }
+  return state.roomSpawns[key];
+}
+
+function addSpawnedItem(roomId, itemId, qty = 1) {
+  const spawn = ensureRoomSpawn(roomId);
+  const normalizedId = normalizeId(itemId);
+  if (!normalizedId) return spawn.items;
+  const entry = spawn.items.find((it) => normalizeId(it.id) === normalizedId);
+  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
+  if (entry) {
+    entry.qty += amount;
+  } else {
+    spawn.items.push({ id: itemId, qty: amount });
+  }
+  return spawn.items;
+}
+
+function consumeSpawnedItem(roomId, itemId, qty = 1) {
+  const spawn = ensureRoomSpawn(roomId);
+  const normalizedId = normalizeId(itemId);
+  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
+  spawn.items = (spawn.items || []).map((it) => ({ ...it })).filter((it) => {
+    if (normalizeId(it.id) !== normalizedId) return true;
+    const remaining = (it.qty || 0) - amount;
+    if (remaining > 0) {
+      it.qty = remaining;
+      return true;
+    }
+    return false;
+  });
+  state.roomSpawns[normalizeId(roomId)] = spawn;
+  return spawn.items;
+}
+
+function addSpawnedEnemy(roomId, enemyId, qty = 1) {
+  const spawn = ensureRoomSpawn(roomId);
+  const normalizedId = normalizeId(enemyId);
+  if (!normalizedId) return spawn.enemies;
+  const entry = spawn.enemies.find((en) => normalizeId(en.id) === normalizedId);
+  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
+  if (entry) {
+    entry.qty += amount;
+  } else {
+    spawn.enemies.push({ id: enemyId, qty: amount });
+  }
+  return spawn.enemies;
+}
+
+function addSpawnedNpc(roomId, npcId) {
+  const normalizedRoom = normalizeId(roomId);
+  if (!npcId || !normalizedRoom) return;
+  ensureNpcState(npcId, normalizedRoom);
+  state.npcs[npcId].room = normalizedRoom;
+}
+
+function moveNpcToRoom(npcId, roomId) {
+  if (!npcId || !roomId) return;
+  ensureNpcState(npcId, roomId);
+  state.npcs[npcId].room = normalizeId(roomId);
+}
+
+function npcIsInRoom(npcId, roomId) {
+  if (!npcId || !roomId) return false;
+  const npcState = ensureNpcState(npcId);
+  return normalizeId(npcState.room) === normalizeId(roomId);
+}
+
 async function loadRoom(id) {
   if (!cache.rooms[id]) {
     cache.rooms[id] = await loadJson(`rooms/${id}.json`);
@@ -274,12 +379,44 @@ async function loadEnemy(id) {
   return cache.enemies[id];
 }
 
+function ensureNpcState(npcId, defaultRoom = null) {
+  if (!state.npcs || typeof state.npcs !== 'object') {
+    state.npcs = {};
+  }
+  if (!state.npcFlags || typeof state.npcFlags !== 'object') {
+    state.npcFlags = {};
+  }
+  if (!state.npcs[npcId]) {
+    state.npcs[npcId] = { room: defaultRoom ? normalizeId(defaultRoom) : null, flags: {}, counters: {} };
+  }
+  if (!state.npcs[npcId].flags) {
+    state.npcs[npcId].flags = {};
+  }
+  if (!state.npcs[npcId].counters) {
+    state.npcs[npcId].counters = {};
+  }
+  if (!state.npcFlags[npcId]) {
+    state.npcFlags[npcId] = state.npcs[npcId].flags;
+  } else {
+    state.npcs[npcId].flags = state.npcFlags[npcId];
+  }
+  return state.npcs[npcId];
+}
+
 async function loadNpc(id) {
   if (!cache.npcs[id]) {
     cache.npcs[id] = await loadJson(`npcs/${id}.json`);
     if (cache.npcs[id].flags && !state.npcFlags[id]) {
       state.npcFlags[id] = { ...cache.npcs[id].flags };
     }
+  }
+  ensureNpcState(id, cache.npcs[id]?.room);
+  if (cache.npcs[id].flags && Object.keys(cache.npcs[id].flags).length && !Object.keys(state.npcs[id].flags).length) {
+    state.npcs[id].flags = { ...cache.npcs[id].flags };
+    state.npcFlags[id] = state.npcs[id].flags;
+  }
+  if (cache.npcs[id].counters && !state.npcs[id].counters) {
+    state.npcs[id].counters = { ...cache.npcs[id].counters };
   }
   return cache.npcs[id];
 }
@@ -355,9 +492,17 @@ function npcVisible(npc) {
 
 async function listNpcsInRoom(roomId) {
   const room = await loadRoom(roomId);
+  const normalizedRoom = normalizeId(roomId);
   const npcIds = new Set(room.npcs || []);
+  Object.entries(state.npcs || {}).forEach(([npcId, meta]) => {
+    if (meta.room && normalizeId(meta.room) === normalizedRoom) {
+      npcIds.add(npcId);
+    }
+  });
   Object.values(cache.npcs).forEach((npc) => {
-    if (npc.room && normalizeId(npc.room) === normalizeId(roomId)) {
+    const npcState = ensureNpcState(npc.id, npc.room);
+    const currentRoom = npcState.room || npc.room;
+    if (currentRoom && normalizeId(currentRoom) === normalizedRoom) {
       npcIds.add(npc.id);
     }
   });
@@ -443,13 +588,16 @@ function saveState() {
       location: state.location,
       inventory: state.inventory,
       flags: state.flags,
+      counters: state.counters,
       stats: state.stats,
       inCombat: state.inCombat,
       enemy: state.enemy,
       combat: state.combat,
       visited: state.visited,
       lockedExits: state.lockedExits,
+      roomSpawns: state.roomSpawns,
       npcFlags: state.npcFlags,
+      npcs: state.npcs,
       dialog: state.dialog
     })
   );
@@ -478,6 +626,15 @@ function loadStateFromSave() {
     }
     if (!state.npcFlags) {
       state.npcFlags = {};
+    }
+    if (!state.counters) {
+      state.counters = {};
+    }
+    if (!state.roomSpawns) {
+      state.roomSpawns = {};
+    }
+    if (!state.npcs) {
+      state.npcs = {};
     }
     return true;
   } catch (err) {
@@ -603,10 +760,17 @@ function formatInventoryLine(item, qty = 1) {
   return name;
 }
 
-async function showRoom(firstTime = false) {
+async function showRoom(firstTime = false, options = {}) {
+  const { recordVisit = true } = options;
   ensureAdventureUI();
   const room = await loadRoom(state.location);
   state.visited[room.id] = true;
+
+  if (recordVisit) {
+    addCounter(`enter:${normalizeId(room.id)}`, 1);
+    addCounter(`visit:${normalizeId(room.id)}`, 1);
+    saveState();
+  }
 
   if (room.ascii) {
     await loadAscii(room.ascii);
@@ -619,9 +783,14 @@ async function showRoom(firstTime = false) {
   lines.push('');
   lines.push(room.description);
 
-  if (room.items && room.items.length) {
+  const roomSpawns = ensureRoomSpawn(room.id);
+
+  const staticItems = room.items || [];
+  const spawnedItems = roomSpawns.items || [];
+  if (staticItems.length || spawnedItems.length) {
     lines.push('');
-    lines.push('Hier siehst du: ' + room.items.map((i) => `"${i}"`).join(', '));
+    const spawnLabels = spawnedItems.map((i) => `"${i.id}"${i.qty && i.qty > 1 ? ` x${i.qty}` : ''}`);
+    lines.push('Hier siehst du: ' + [...staticItems.map((i) => `"${i}"`), ...spawnLabels].join(', '));
   }
   if (room.objects && room.objects.length) {
     lines.push('Objekte: ' + room.objects.join(', '));
@@ -629,6 +798,10 @@ async function showRoom(firstTime = false) {
   const npcsInRoom = await listNpcsInRoom(room.id);
   if (npcsInRoom.length) {
     lines.push('Personen: ' + npcsInRoom.map((n) => n.name || n.id).join(', '));
+  }
+  const spawnedEnemies = (roomSpawns.enemies || []).filter((e) => e.qty > 0);
+  if (spawnedEnemies.length) {
+    lines.push('Gefahren: ' + spawnedEnemies.map((e) => `${e.id}${e.qty > 1 ? ` x${e.qty}` : ''}`).join(', '));
   }
   const exits = Object.keys(room.exits || {});
   if (exits.length) {
@@ -647,7 +820,7 @@ async function showRoom(firstTime = false) {
 function ctxForEvents() {
   return {
     saveState,
-    showCurrentRoom: async (first = false) => showRoom(first),
+    showCurrentRoom: async (first = false, opts = {}) => showRoom(first, opts),
     startCombat: async (enemyId) => startCombat(enemyId, state, ctxForEvents()),
     loadEnemy,
     loadItem,
@@ -658,7 +831,16 @@ function ctxForEvents() {
     endDialog: () => endDialog(),
     gotoDialogNode: async (nodeId) => gotoDialogNode(nodeId),
     showDialogNode: async () => showDialogNode(),
-    logDebugEvent: (event) => logEventForDebug(event)
+    logDebugEvent: (event) => logEventForDebug(event),
+    addCounter: (key, amount) => addCounter(key, amount),
+    setCounter: (key, value) => setCounter(key, value),
+    getCounter: (key) => getCounter(key),
+    spawnItem: (roomId, itemId, qty) => addSpawnedItem(roomId, itemId, qty),
+    spawnEnemy: (roomId, enemyId, qty) => addSpawnedEnemy(roomId, enemyId, qty),
+    spawnNpc: (roomId, npcId) => addSpawnedNpc(roomId, npcId),
+    moveNpc: (npcId, roomId) => moveNpcToRoom(npcId, roomId),
+    npcIsInRoom: (npcId, roomId) => npcIsInRoom(npcId, roomId),
+    getRoomSpawns: (roomId) => ensureRoomSpawn(roomId)
   };
 }
 
@@ -683,29 +865,38 @@ async function performMove(action) {
 }
 
 async function performTake(action) {
-    const room = await loadRoom(state.location);
-    if (!action.object) {
-      advLog([cache.world.messages.unknownCommand]);
-      return;
-    }
+  const room = await loadRoom(state.location);
+  if (!action.object) {
+    advLog([cache.world.messages.unknownCommand]);
+    return;
+  }
   const available = room.items || [];
+  const spawns = ensureRoomSpawn(room.id);
+  const spawnItems = spawns.items || [];
   const match = findMatchByNormalized(available, action.object);
+  const dynamicMatch = match ? null : findMatchByNormalized(spawnItems.map((i) => i.id), action.object);
 
-  if (!match) {
+  if (!match && !dynamicMatch) {
     advLog([cache.world.messages.cannotTake]);
     return;
   }
-  const item = await loadItem(match);
+  const itemId = match || dynamicMatch;
+  const item = await loadItem(itemId);
   if (!item.pickup) {
     advLog(['Das lässt sich nicht mitnehmen.']);
     return;
   }
-  const added = await addToInventory(item.id, 1);
+  const qty = dynamicMatch ? Math.max(1, (spawnItems.find((i) => normalizeId(i.id) === normalizeId(dynamicMatch))?.qty || 1)) : 1;
+  const added = await addToInventory(item.id, qty);
   if (!added) {
     advLog(['Du kannst das nicht mehr tragen.']);
     return;
   }
-  room.items = available.filter((i) => i !== match);
+  if (match) {
+    room.items = available.filter((i) => i !== match);
+  } else {
+    consumeSpawnedItem(room.id, item.id, qty);
+  }
   advLog([`Du nimmst ${formatInventoryLine(item, getInvQty(item.id))}.`]);
   saveState();
 }
@@ -715,7 +906,7 @@ async function performInspect(action) {
 
   // Kein Objekt angegeben → Umgebung / Raumbeschreibung erneut anzeigen
   if (!action.object) {
-    await showRoom(false);
+    await showRoom(false, { recordVisit: false });
     return;
   }
 

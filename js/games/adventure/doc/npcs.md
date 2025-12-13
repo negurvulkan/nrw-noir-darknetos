@@ -16,6 +16,8 @@ NPCs können in Räumen stehen und Dialoge starten.
 - **hidden_if_flag**: Blendet den NPC aus, wenn ein Flag `{ "key": "...", "equals": true }` passt.
 - **only_if_flag**: Zeigt den NPC nur, wenn ein Flag passend gesetzt ist.
 
+Während des Spiels werden Position, Flags und Counter des NPC in `state.npcs[id]` gepflegt. Dadurch können Events wie `npc_move` oder `npc_move_if_present` die aktuelle Raum-Zuordnung persistent verändern.
+
 ### Beispiel
 ```json
 {

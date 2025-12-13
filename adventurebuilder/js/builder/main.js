@@ -1419,6 +1419,15 @@ function eventArea(labelText, value, onChange) {
   return wrap;
 }
 
+function buildEventBlockOptions() {
+  return {
+    rooms: existingIdsFor('room'),
+    items: existingIdsFor('item'),
+    enemies: existingIdsFor('enemy'),
+    npcs: existingIdsFor('npc'),
+  };
+}
+
 function createEventEditor(initialValue, onChange) {
   const container = document.createElement('div');
   container.className = 'event-editor';
@@ -1439,7 +1448,7 @@ function createEventEditor(initialValue, onChange) {
   const jsonArea = document.createElement('textarea');
   jsonArea.value = JSON.stringify(initialValue || [], null, 2);
 
-  const editor = initEventBlockEditor(blockHost, initialValue || []);
+  const editor = initEventBlockEditor(blockHost, initialValue || [], buildEventBlockOptions());
 
   if (window.Blockly && editor?.workspace) {
     window.setTimeout(() => {

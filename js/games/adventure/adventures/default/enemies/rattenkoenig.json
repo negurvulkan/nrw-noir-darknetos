@@ -1,0 +1,16 @@
+{
+  "id": "rattenkoenig",
+  "name": "Rattenkönig",
+  "description": "Ein Knäuel aus Schwänzen und Fell, das mit glasigen Augen auf dich zukriecht.",
+  "stats": { "hp": 8, "attack": 2, "defense": 0 },
+  "behavior": { "fleeDifficulty": 0.4 },
+  "drops": [],
+  "hooks": {
+    "on_attack": [
+      { "type": "message", "text": "Die Ratten schlingen sich um deine Beine und versuchen zu beißen." }
+    ],
+    "on_defeat": [
+      { "type": "message", "text": "Der Rattenkönig zerfällt zu einem Haufen nasser Schwänze." }
+    ]
+  }
+}

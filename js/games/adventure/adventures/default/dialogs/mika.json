@@ -1,0 +1,16 @@
+{
+  "start": "start",
+  "nodes": {
+    "start": {
+      "text": "Mika wischt sich den Schweiß von der Stirn. \"Ich muss weg von diesem Labor.\"",
+      "choices": [
+        { "text": "Alles okay?", "next": "ok" },
+        { "text": "Viel Glück", "next": "end" }
+      ]
+    },
+    "ok": {
+      "text": "\"Solange der Strom flackert, bin ich nervös. Ich warte draußen.\"",
+      "choices": [ { "text": "Bis später", "next": "end" } ]
+    }
+  }
+}
