@@ -1,6 +1,6 @@
 // Core adventure engine logic.
 import { parseInput } from './parser.js';
-import { loadJson, loadAscii } from './loader.js';
+import { loadJson, loadAscii, loadActorJson } from './loader.js';
 import { runEvents } from './events.js';
 import { startCombat, handleCombatAction } from './combat.js';
 import { ADVENTURE_INDEX, getCurrentAdventure, getDataRoot, setCurrentAdventure } from './config.js';
@@ -21,6 +21,7 @@ const DEBUG_LOG_LIMIT = 200;
 let debugLogging = false;
 const debugLogEntries = [];
 
+let injectedAdventureIndex = null;
 let recipeIndex = [];
 let recipeKeyIndex = new Map();
 
@@ -29,29 +30,35 @@ const createEmptyCache = () => ({
   rooms: {},
   items: {},
   objects: {},
-  enemies: {},
-  npcs: {},
+  actors: {},
   dialogs: {},
   itemIds: [],
+  actorIds: [],
+  actorIndexLoaded: false,
   recipeIndexBuilt: false
 });
 
-const createEmptyState = () => ({
-  location: null,
-  inventory: [],
-  flags: {},
-  counters: {},
-  stats: { ...defaultStats },
-  inCombat: false,
-  enemy: null,
-  combat: { defending: false, enemyStartHp: null },
-  visited: {},
-  lockedExits: {},
-  roomSpawns: {},
-  npcFlags: {},
-  npcs: {},
-  dialog: { active: false, npcId: null, nodeId: null }
-});
+const createEmptyState = () => {
+  const baseState = {
+    location: null,
+    inventory: [],
+    flags: {},
+    counters: {},
+    stats: { ...defaultStats },
+    inCombat: false,
+    enemy: null,
+    combat: { defending: false, enemyStartHp: null },
+    visited: {},
+    lockedExits: {},
+    roomSpawns: {},
+    actorFlags: {},
+    actors: {},
+    dialog: { active: false, actorId: null, npcId: null, nodeId: null }
+  };
+  baseState.npcFlags = baseState.actorFlags;
+  baseState.npcs = baseState.actors;
+  return baseState;
+};
 
 let cache = createEmptyCache();
 let state = createEmptyState();
@@ -249,6 +256,18 @@ function ensureCounterState() {
   return state.counters;
 }
 
+function ensureActorContainers() {
+  if (!state.actorFlags || typeof state.actorFlags !== 'object') {
+    state.actorFlags = state.npcFlags && typeof state.npcFlags === 'object' ? state.npcFlags : {};
+  }
+  if (!state.actors || typeof state.actors !== 'object') {
+    state.actors = state.npcs && typeof state.npcs === 'object' ? state.npcs : {};
+  }
+  state.npcFlags = state.actorFlags;
+  state.npcs = state.actors;
+  return { flags: state.actorFlags, actors: state.actors };
+}
+
 function getCounter(key) {
   return ensureCounterState()[key] || 0;
 }
@@ -275,9 +294,39 @@ function ensureRoomSpawn(roomId) {
   }
   const key = normalizeId(roomId);
   if (!state.roomSpawns[key]) {
-    state.roomSpawns[key] = { items: [], enemies: [], npcs: [] };
+    state.roomSpawns[key] = { items: [], actors: [] };
   }
-  return state.roomSpawns[key];
+  const spawn = state.roomSpawns[key];
+  if (!spawn.actors) {
+    spawn.actors = [];
+  }
+
+  // Legacy migrations
+  if (Array.isArray(spawn.npcs) && spawn.npcs.length) {
+    spawn.npcs.forEach((npcId) => {
+      if (!spawn.actors.some((act) => normalizeId(act.id) === normalizeId(npcId))) {
+        spawn.actors.push({ id: npcId, qty: 1, type: 'npc' });
+      }
+    });
+    delete spawn.npcs;
+  }
+  if (Array.isArray(spawn.enemies) && spawn.enemies.length) {
+    spawn.enemies.forEach((entry) => {
+      const normalized = normalizeId(entry.id || entry);
+      const qty = Number.isFinite(entry.qty) && entry.qty > 0 ? entry.qty : 1;
+      if (!normalized) return;
+      const existing = spawn.actors.find((act) => normalizeId(act.id) === normalized);
+      if (existing) {
+        existing.qty = (existing.qty || 0) + qty;
+        existing.type = existing.type || 'enemy';
+      } else {
+        spawn.actors.push({ id: entry.id || entry, qty, type: 'enemy' });
+      }
+    });
+    delete spawn.enemies;
+  }
+
+  return spawn;
 }
 
 function addSpawnedItem(roomId, itemId, qty = 1) {
@@ -311,37 +360,45 @@ function consumeSpawnedItem(roomId, itemId, qty = 1) {
   return spawn.items;
 }
 
-function addSpawnedEnemy(roomId, enemyId, qty = 1) {
-  const spawn = ensureRoomSpawn(roomId);
-  const normalizedId = normalizeId(enemyId);
-  if (!normalizedId) return spawn.enemies;
-  const entry = spawn.enemies.find((en) => normalizeId(en.id) === normalizedId);
-  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
-  if (entry) {
-    entry.qty += amount;
-  } else {
-    spawn.enemies.push({ id: enemyId, qty: amount });
-  }
-  return spawn.enemies;
-}
-
-function addSpawnedNpc(roomId, npcId) {
+async function addSpawnedActor(roomId, actorId, qty = 1) {
   const normalizedRoom = normalizeId(roomId);
-  if (!npcId || !normalizedRoom) return;
-  ensureNpcState(npcId, normalizedRoom);
-  state.npcs[npcId].room = normalizedRoom;
+  if (!actorId || !normalizedRoom) return ensureRoomSpawn(roomId).actors;
+  const actor = await loadActor(actorId);
+  const { actors } = ensureActorContainers();
+  const actorState = ensureActorState(actor.id, normalizedRoom);
+  actorState.room = normalizedRoom;
+
+  const spawn = ensureRoomSpawn(roomId);
+  const normalizedId = normalizeId(actor.id);
+  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
+  const isEnemyType = actor.type === 'enemy' || !!actor.stats;
+
+  if (isEnemyType) {
+    const entry = spawn.actors.find((en) => normalizeId(en.id) === normalizedId);
+    if (entry) {
+      entry.qty = (entry.qty || 0) + amount;
+      entry.type = entry.type || actor.type || 'enemy';
+    } else {
+      spawn.actors.push({ id: actor.id, qty: amount, type: actor.type || 'enemy' });
+    }
+  } else if (!spawn.actors.some((candidate) => normalizeId(candidate.id) === normalizedId)) {
+    spawn.actors.push({ id: actor.id, qty: 1, type: actor.type || 'npc' });
+  }
+
+  actors[actor.id] = actorState;
+  return spawn.actors;
 }
 
-function moveNpcToRoom(npcId, roomId) {
-  if (!npcId || !roomId) return;
-  ensureNpcState(npcId, roomId);
-  state.npcs[npcId].room = normalizeId(roomId);
+function moveActorToRoom(actorId, roomId) {
+  if (!actorId || !roomId) return;
+  const actorState = ensureActorState(actorId, roomId);
+  actorState.room = normalizeId(roomId);
 }
 
-function npcIsInRoom(npcId, roomId) {
-  if (!npcId || !roomId) return false;
-  const npcState = ensureNpcState(npcId);
-  return normalizeId(npcState.room) === normalizeId(roomId);
+function actorIsInRoom(actorId, roomId) {
+  if (!actorId || !roomId) return false;
+  const actorState = ensureActorState(actorId);
+  return normalizeId(actorState.room) === normalizeId(roomId);
 }
 
 async function loadRoom(id) {
@@ -372,60 +429,86 @@ async function loadObject(id) {
   return cache.objects[id];
 }
 
-async function loadEnemy(id) {
-  if (!cache.enemies[id]) {
-    cache.enemies[id] = await loadJson(`enemies/${id}.json`);
+async function loadActor(id) {
+  if (!id) return null;
+  if (!cache.actorIndexLoaded) {
+    await loadActorIndex();
   }
-  return cache.enemies[id];
-}
+  if (!cache.actors[id]) {
+    cache.actors[id] = await loadActorJson(id);
+  }
+  const actorId = cache.actors[id].id || id;
+  const hasStats = cache.actors[id].stats && Object.keys(cache.actors[id].stats).length;
+  cache.actors[id].id = actorId;
+  cache.actors[id].type = cache.actors[id].type || (hasStats ? 'enemy' : 'npc');
+  if (!cache.actors[id].stats && cache.actors[id].type === 'enemy') {
+    cache.actors[id].stats = { ...defaultStats };
+  }
+  const combat = cache.actors[id].combat || {};
+  if (combat.enabled === undefined) {
+    combat.enabled = cache.actors[id].type === 'enemy' && !!cache.actors[id].stats;
+  }
+  cache.actors[id].combat = combat;
 
-function ensureNpcState(npcId, defaultRoom = null) {
-  if (!state.npcs || typeof state.npcs !== 'object') {
-    state.npcs = {};
+  cache.actorIds = cache.actorIds || [];
+  if (!cache.actorIds.includes(actorId)) {
+    cache.actorIds.push(actorId);
   }
-  if (!state.npcFlags || typeof state.npcFlags !== 'object') {
-    state.npcFlags = {};
+
+  const actorState = ensureActorState(actorId, cache.actors[id]?.room);
+  if (cache.actors[id].flags && Object.keys(cache.actors[id].flags).length && !Object.keys(actorState.flags).length) {
+    actorState.flags = { ...cache.actors[id].flags };
+    state.actorFlags[actorId] = actorState.flags;
   }
-  if (!state.npcs[npcId]) {
-    state.npcs[npcId] = { room: defaultRoom ? normalizeId(defaultRoom) : null, flags: {}, counters: {} };
+  if (cache.actors[id].counters && !actorState.counters) {
+    actorState.counters = { ...cache.actors[id].counters };
   }
-  if (!state.npcs[npcId].flags) {
-    state.npcs[npcId].flags = {};
-  }
-  if (!state.npcs[npcId].counters) {
-    state.npcs[npcId].counters = {};
-  }
-  if (!state.npcFlags[npcId]) {
-    state.npcFlags[npcId] = state.npcs[npcId].flags;
-  } else {
-    state.npcs[npcId].flags = state.npcFlags[npcId];
-  }
-  return state.npcs[npcId];
+  return cache.actors[id];
 }
 
 async function loadNpc(id) {
-  if (!cache.npcs[id]) {
-    cache.npcs[id] = await loadJson(`npcs/${id}.json`);
-    if (cache.npcs[id].flags && !state.npcFlags[id]) {
-      state.npcFlags[id] = { ...cache.npcs[id].flags };
-    }
+  const actor = await loadActor(id);
+  if (actor && actor.type !== 'npc') {
+    actor.type = actor.type || 'npc';
   }
-  ensureNpcState(id, cache.npcs[id]?.room);
-  if (cache.npcs[id].flags && Object.keys(cache.npcs[id].flags).length && !Object.keys(state.npcs[id].flags).length) {
-    state.npcs[id].flags = { ...cache.npcs[id].flags };
-    state.npcFlags[id] = state.npcs[id].flags;
-  }
-  if (cache.npcs[id].counters && !state.npcs[id].counters) {
-    state.npcs[id].counters = { ...cache.npcs[id].counters };
-  }
-  return cache.npcs[id];
+  return actor;
 }
 
-async function loadDialog(npcId) {
-  if (!cache.dialogs[npcId]) {
-    cache.dialogs[npcId] = await loadJson(`dialogs/${npcId}.json`);
+async function loadEnemy(id) {
+  const actor = await loadActor(id);
+  if (actor && actor.type !== 'enemy') {
+    actor.type = actor.type || 'enemy';
   }
-  return cache.dialogs[npcId];
+  return actor;
+}
+
+function ensureActorState(actorId, defaultRoom = null) {
+  const { actors, flags } = ensureActorContainers();
+  if (!actors[actorId] && state.npcs && state.npcs[actorId]) {
+    actors[actorId] = { ...state.npcs[actorId] };
+  }
+  if (!actors[actorId]) {
+    actors[actorId] = { room: defaultRoom ? normalizeId(defaultRoom) : null, flags: {}, counters: {} };
+  }
+  if (!actors[actorId].flags) {
+    actors[actorId].flags = {};
+  }
+  if (!actors[actorId].counters) {
+    actors[actorId].counters = {};
+  }
+  if (!flags[actorId]) {
+    flags[actorId] = actors[actorId].flags;
+  } else {
+    actors[actorId].flags = flags[actorId];
+  }
+  return actors[actorId];
+}
+
+async function loadDialog(actorId) {
+  if (!cache.dialogs[actorId]) {
+    cache.dialogs[actorId] = await loadJson(`dialogs/${actorId}.json`);
+  }
+  return cache.dialogs[actorId];
 }
 
 async function loadItemIndex() {
@@ -443,6 +526,25 @@ async function loadItemIndex() {
   }
   cache.itemIds = cache.itemIds || [];
   return cache.itemIds;
+}
+
+async function loadActorIndex() {
+  if (cache.actorIds && cache.actorIds.length) {
+    return cache.actorIds;
+  }
+  cache.actorIndexLoaded = true;
+  try {
+    const index = await loadJson('actors/index.json');
+    if (Array.isArray(index)) {
+      cache.actorIds = index;
+      return cache.actorIds;
+    }
+  } catch (err) {
+    console.warn('Akteur-Index konnte nicht geladen werden:', err);
+  }
+
+  cache.actorIds = cache.actorIds || [];
+  return cache.actorIds;
 }
 
 function registerRecipeFromItem(item) {
@@ -483,36 +585,63 @@ async function ensureRecipeIndexBuilt() {
   cache.recipeIndexBuilt = true;
 }
 
-function npcVisible(npc) {
-  if (!npc) return false;
-  if (npc.hidden_if_flag && flagMatches(npc.hidden_if_flag)) return false;
-  if (npc.only_if_flag && !flagMatches(npc.only_if_flag)) return false;
+function actorVisible(actor) {
+  if (!actor) return false;
+  if (actor.hidden_if_flag && flagMatches(actor.hidden_if_flag)) return false;
+  if (actor.only_if_flag && !flagMatches(actor.only_if_flag)) return false;
   return true;
 }
 
-async function listNpcsInRoom(roomId) {
+async function listActorsInRoom(roomId) {
   const room = await loadRoom(roomId);
   const normalizedRoom = normalizeId(roomId);
-  const npcIds = new Set(room.npcs || []);
-  Object.entries(state.npcs || {}).forEach(([npcId, meta]) => {
+  const entries = new Map();
+  const ensureQty = (id, qty = 1) => {
+    const normalized = normalizeId(id);
+    if (!normalized) return;
+    const existing = entries.get(normalized) || { id, qty: 0 };
+    existing.id = id;
+    existing.qty = Math.max(existing.qty || 0, qty || 1);
+    entries.set(normalized, existing);
+  };
+  const addQty = (id, qty = 1) => {
+    const normalized = normalizeId(id);
+    if (!normalized) return;
+    const normalizedQty = Number.isFinite(qty) && qty > 0 ? qty : 0;
+    if (!normalizedQty) return;
+    const existing = entries.get(normalized) || { id, qty: 0 };
+    existing.id = id;
+    existing.qty = (existing.qty || 0) + normalizedQty;
+    entries.set(normalized, existing);
+  };
+
+  (room.actors || []).forEach((id) => ensureQty(id));
+  (room.npcs || []).forEach((id) => ensureQty(id));
+  (room.enemies || []).forEach((id) => ensureQty(id));
+
+  const spawns = ensureRoomSpawn(roomId);
+  (spawns.actors || []).forEach((spawn) => addQty(spawn.id, spawn.qty));
+
+  Object.entries(state.actors || {}).forEach(([actorId, meta]) => {
     if (meta.room && normalizeId(meta.room) === normalizedRoom) {
-      npcIds.add(npcId);
+      ensureQty(actorId);
     }
   });
-  Object.values(cache.npcs).forEach((npc) => {
-    const npcState = ensureNpcState(npc.id, npc.room);
-    const currentRoom = npcState.room || npc.room;
+
+  Object.values(cache.actors).forEach((actor) => {
+    const actorState = ensureActorState(actor.id, actor.room);
+    const currentRoom = actorState.room || actor.room;
     if (currentRoom && normalizeId(currentRoom) === normalizedRoom) {
-      npcIds.add(npc.id);
+      ensureQty(actor.id);
     }
   });
 
   const visible = [];
-  for (const npcId of npcIds) {
+  for (const entry of entries.values()) {
     // eslint-disable-next-line no-await-in-loop
-    const npc = await loadNpc(npcId);
-    if (npcVisible(npc)) {
-      visible.push(npc);
+    const actor = await loadActor(entry.id);
+    if (actorVisible(actor)) {
+      visible.push({ actor, qty: entry.qty || 1 });
     }
   }
   return visible;
@@ -527,6 +656,12 @@ function resetAdventureData(id) {
 }
 
 async function loadAdventureIndex() {
+  // 1) Wenn von außen gesetzt: direkt nutzen
+  if (Array.isArray(injectedAdventureIndex) && injectedAdventureIndex.length) {
+    return injectedAdventureIndex;
+  }
+
+  // 2) Fallback: klassisch via fetch(ADVENTURE_INDEX)
   const res = await fetch(ADVENTURE_INDEX);
   if (!res.ok) {
     throw new Error('Adventure-Index konnte nicht geladen werden.');
@@ -596,8 +731,10 @@ function saveState() {
       visited: state.visited,
       lockedExits: state.lockedExits,
       roomSpawns: state.roomSpawns,
-      npcFlags: state.npcFlags,
-      npcs: state.npcs,
+      actorFlags: state.actorFlags,
+      actors: state.actors,
+      npcFlags: state.actorFlags,
+      npcs: state.actors,
       dialog: state.dialog
     })
   );
@@ -619,13 +756,13 @@ function loadStateFromSave() {
       state.stats.maxHp = defaultStats.maxHp;
     }
     if (!state.dialog) {
-      state.dialog = { active: false, npcId: null, nodeId: null };
+      state.dialog = { active: false, actorId: null, npcId: null, nodeId: null };
     }
     if (!state.combat) {
       state.combat = { defending: false, enemyStartHp: null };
     }
-    if (!state.npcFlags) {
-      state.npcFlags = {};
+    if (!state.actorFlags) {
+      state.actorFlags = state.npcFlags ? { ...state.npcFlags } : {};
     }
     if (!state.counters) {
       state.counters = {};
@@ -633,9 +770,13 @@ function loadStateFromSave() {
     if (!state.roomSpawns) {
       state.roomSpawns = {};
     }
-    if (!state.npcs) {
-      state.npcs = {};
+    if (!state.actors) {
+      state.actors = state.npcs ? { ...state.npcs } : {};
     }
+    ensureActorContainers();
+    state.dialog.actorId = state.dialog.actorId || state.dialog.npcId || null;
+    state.dialog.npcId = state.dialog.actorId;
+    Object.keys(state.roomSpawns || {}).forEach((roomId) => ensureRoomSpawn(roomId));
     return true;
   } catch (err) {
     console.error('Savegame fehlerhaft:', err);
@@ -649,14 +790,14 @@ function clearSave() {
 }
 
 function normalizeId(str) {
-  return (str || "")
+  return (str || '')
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, "_")
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss");
+    .replace(/\s+/g, '_')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss');
 }
 
 function findMatchByNormalized(list = [], query = '') {
@@ -795,13 +936,16 @@ async function showRoom(firstTime = false, options = {}) {
   if (room.objects && room.objects.length) {
     lines.push('Objekte: ' + room.objects.join(', '));
   }
-  const npcsInRoom = await listNpcsInRoom(room.id);
-  if (npcsInRoom.length) {
-    lines.push('Personen: ' + npcsInRoom.map((n) => n.name || n.id).join(', '));
-  }
-  const spawnedEnemies = (roomSpawns.enemies || []).filter((e) => e.qty > 0);
-  if (spawnedEnemies.length) {
-    lines.push('Gefahren: ' + spawnedEnemies.map((e) => `${e.id}${e.qty > 1 ? ` x${e.qty}` : ''}`).join(', '));
+  const actorsInRoom = await listActorsInRoom(room.id);
+  if (actorsInRoom.length) {
+    const labels = actorsInRoom.map(({ actor, qty }) => {
+      const name = actor.name || actor.id;
+      const qtyLabel = qty > 1 ? ` x${qty}` : '';
+      const hostile = actor.combat?.enabled || actor.type === 'enemy';
+      const hostileLabel = hostile ? ' [feindlich]' : '';
+      return `${name}${qtyLabel}${hostileLabel}`;
+    });
+    lines.push('Akteure: ' + labels.join(', '));
   }
   const exits = Object.keys(room.exits || {});
   if (exits.length) {
@@ -822,6 +966,7 @@ function ctxForEvents() {
     saveState,
     showCurrentRoom: async (first = false, opts = {}) => showRoom(first, opts),
     startCombat: async (enemyId) => startCombat(enemyId, state, ctxForEvents()),
+    loadActor,
     loadEnemy,
     loadItem,
     getInvQty: (id) => getInvQty(id),
@@ -836,10 +981,13 @@ function ctxForEvents() {
     setCounter: (key, value) => setCounter(key, value),
     getCounter: (key) => getCounter(key),
     spawnItem: (roomId, itemId, qty) => addSpawnedItem(roomId, itemId, qty),
-    spawnEnemy: (roomId, enemyId, qty) => addSpawnedEnemy(roomId, enemyId, qty),
-    spawnNpc: (roomId, npcId) => addSpawnedNpc(roomId, npcId),
-    moveNpc: (npcId, roomId) => moveNpcToRoom(npcId, roomId),
-    npcIsInRoom: (npcId, roomId) => npcIsInRoom(npcId, roomId),
+    spawnActor: (roomId, actorId, qty) => addSpawnedActor(roomId, actorId, qty),
+    spawnEnemy: (roomId, enemyId, qty) => addSpawnedActor(roomId, enemyId, qty),
+    spawnNpc: (roomId, npcId) => addSpawnedActor(roomId, npcId, 1),
+    moveActor: (actorId, roomId) => moveActorToRoom(actorId, roomId),
+    moveNpc: (npcId, roomId) => moveActorToRoom(npcId, roomId),
+    npcIsInRoom: (npcId, roomId) => actorIsInRoom(npcId, roomId),
+    actorIsInRoom: (actorId, roomId) => actorIsInRoom(actorId, roomId),
     getRoomSpawns: (roomId) => ensureRoomSpawn(roomId)
   };
 }
@@ -1110,8 +1258,11 @@ async function performCombine(action) {
 }
 
 async function performTalk(action) {
-  const npcs = await listNpcsInRoom(state.location);
-  if (!npcs.length) {
+  const actors = await listActorsInRoom(state.location);
+  const talkable = actors
+    .map((entry) => entry.actor)
+    .filter((actor) => actor && (actor.dialog_start || actor.dialog || !(actor.type === 'enemy' || actor.stats)));
+  if (!talkable.length) {
     dialogLog(['Niemand antwortet.']);
     return;
   }
@@ -1119,13 +1270,13 @@ async function performTalk(action) {
   let target = null;
   if (action.object) {
     const normalized = normalizeId(action.object);
-    target = npcs.find(
-      (npc) => normalizeId(npc.id) === normalized || normalizeId(npc.name || '').includes(normalized)
+    target = talkable.find(
+      (actor) => normalizeId(actor.id) === normalized || normalizeId(actor.name || '').includes(normalized)
     );
   }
 
   if (!target) {
-    target = npcs.length === 1 ? npcs[0] : null;
+    target = talkable.length === 1 ? talkable[0] : null;
   }
 
   if (!target) {
@@ -1147,7 +1298,7 @@ function dialogLog(lines = [], cls) {
 
 function endDialog(showMessage = false) {
   if (!state.dialog.active) return;
-  state.dialog = { active: false, npcId: null, nodeId: null };
+  state.dialog = { active: false, actorId: null, npcId: null, nodeId: null };
   saveState();
   if (showMessage) {
     dialogLog(['(Dialog beendet)']);
@@ -1157,8 +1308,9 @@ function endDialog(showMessage = false) {
 async function showDialogNode() {
   if (!state.dialog.active) return;
   ensureAdventureUI();
-  const npc = await loadNpc(state.dialog.npcId);
-  const dialog = await loadDialog(state.dialog.npcId);
+  const actorId = state.dialog.actorId || state.dialog.npcId;
+  const npc = await loadActor(actorId);
+  const dialog = await loadDialog(actorId);
   const nodeId = state.dialog.nodeId || dialog.start || npc.dialog_start || 'start';
   const node = dialog.nodes ? dialog.nodes[nodeId] : null;
   if (!node) {
@@ -1202,8 +1354,9 @@ async function showDialogNode() {
 
 async function handleDialogChoice(index) {
   if (!state.dialog.active) return;
-  const dialog = await loadDialog(state.dialog.npcId);
-  const npc = await loadNpc(state.dialog.npcId);
+  const actorId = state.dialog.actorId || state.dialog.npcId;
+  const dialog = await loadDialog(actorId);
+  const npc = await loadActor(actorId);
   const nodeId = state.dialog.nodeId || dialog.start || npc.dialog_start || 'start';
   const node = dialog.nodes ? dialog.nodes[nodeId] : null;
   if (!node) {
@@ -1245,10 +1398,10 @@ async function handleDialogChoice(index) {
 }
 
 async function startDialogWithNpc(npcId, nodeId = null) {
-  const npc = await loadNpc(npcId);
+  const npc = await loadActor(npcId);
   const dialog = await loadDialog(npc.id);
   const startNode = nodeId || dialog.start || npc.dialog_start || 'start';
-  state.dialog = { active: true, npcId: npc.id, nodeId: startNode };
+  state.dialog = { active: true, actorId: npc.id, npcId: npc.id, nodeId: startNode };
   saveState();
   await showDialogNode();
 }
@@ -1331,6 +1484,9 @@ function printHelp() {
 }
 
 export const adventure = {
+	setAdventureIndex(list) {
+	  injectedAdventureIndex = Array.isArray(list) ? list : null;
+	},
   async loadAdventure(adventureId) {
     await ensureAdventure(adventureId);
     return getCurrentAdventure();
@@ -1434,5 +1590,6 @@ export const adventure = {
     printLines(['Du verlässt das Adventure und kehrst ins Darknetz-Terminal zurück.', ''], 'dim');
   }
 };
+
 
 export default adventure;

@@ -52,11 +52,11 @@ Mehrere Events in Reihe:
 | **unlock_exit**   | Ausgang in Raum öffnen                | `{ "type": "unlock_exit", "room": "villa", "direction": "nord" }` |
 | **lock_exit**     | Ausgang schließen                     | `{ "type": "lock_exit", "room": "villa", "direction": "nord" }`   |
 | **transition**    | Spieler in anderen Raum teleportieren | `{ "type": "transition", "to": "villa_vorhof" }`                  |
-| **trigger_fight** | Kampf starten                         | `{ "type": "trigger_fight", "enemy": "geist" }`                   |
+| **trigger_fight** | Kampf starten (enemy = Actor-ID)      | `{ "type": "trigger_fight", "enemy": "geist" }` |
 
 ## Gegnerdaten & Kampfsystem
 
-* Gegner liegen unter `adventures/<name>/enemies/*.json` und enthalten mindestens `id`, `name`, `description` sowie `stats` (hp/attack/defense).
+* Gegner liegen unter `adventures/<name>/actors/*.json` mit `type: "enemy"` und enthalten mindestens `id`, `name`, `description` sowie `stats` (hp/attack/defense). Legacy-Verzeichnisse `enemies/` werden weiterhin eingelesen.
 * Kämpfe unterstützen mehrere Aktionen: `attack`, `defend` (Schaden halbieren), `flee` (Fluchtchance, konfigurierbar über `behavior.fleeDifficulty`) und `use <item>` für Items mit `combat_effects`.
 * Gegner können optionale Event-Hooks besitzen (alle Felder unter `hooks`):
   * `on_attack` läuft immer, sobald der Spieler „attack“ wählt – vor der Trefferprüfung.

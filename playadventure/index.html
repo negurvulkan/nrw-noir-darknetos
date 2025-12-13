@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <base href="/darknet/">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NRW Noir · Play Adventure</title>
+  <style>
+    :root{
+      --bg:#050308; --panel:#140c20; --panel2:#1b112b; --border:#3a244d;
+      --acc:#c563ff; --acc2:#ff86ff; --txt:#f5f2ff; --dim:#a78bd2; --danger:#ff4f9a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:system-ui,Segoe UI,Roboto,Arial; background:radial-gradient(circle at top,#251037 0,#050308 55%); color:var(--txt);}
+    .wrap{max-width:1100px; margin:0 auto; padding:14px; display:grid; gap:10px;}
+    .top{background:#07030f; border:1px solid var(--border); border-radius:14px; padding:12px; display:grid; gap:10px;}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:end;}
+    label{font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; display:block; margin:0 0 4px;}
+    select,input{background:#12081f; border:1px solid var(--border); color:var(--txt); padding:9px 10px; border-radius:10px; outline:none;}
+    .btn{border:1px solid var(--border); background:#190b2a; color:var(--txt); padding:9px 12px; border-radius:999px; cursor:pointer; font-size:12px; letter-spacing:.06em; text-transform:uppercase;}
+    .btn.primary{background:linear-gradient(135deg,var(--acc),var(--acc2)); color:#060109; border-color:var(--acc);}
+    .btn.danger{border-color:var(--danger); color:var(--danger);}
+    .grid{display:grid; gap:10px; grid-template-columns: 1fr;}
+    @media(min-width:920px){ .grid{grid-template-columns: 360px 1fr;} }
+
+    .panel{background:#07030f; border:1px solid var(--border); border-radius:14px; overflow:hidden;}
+    .panel h3{margin:0; padding:10px 12px; font-size:12px; color:var(--acc2); letter-spacing:.10em; text-transform:uppercase; background:linear-gradient(90deg,#140c20,#1e1431); border-bottom:1px solid var(--border);}
+    .panel .body{padding:12px; display:grid; gap:10px;}
+
+    .chips{display:flex; flex-wrap:wrap; gap:6px;}
+    .chip{border:1px solid var(--border); background:#1b0f2a; color:var(--dim); padding:6px 10px; border-radius:999px; cursor:pointer; font-size:12px;}
+    .chip:hover{border-color:var(--acc2); color:var(--acc2)}
+    .chip.verb{background:#130a20}
+    .chip.dir{background:#0f061a}
+
+    #output{
+      height:62vh;
+      min-height:420px;
+      background:#0b0416;
+      border-top:1px solid var(--border);
+      padding:12px;
+      overflow:auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size:12px;
+      line-height:1.45;
+      white-space:pre-wrap;
+    }
+
+    .status{font-size:12px; color:var(--dim);}
+    .status .err{color:var(--danger);}
+    .inputRow{display:flex; gap:8px;}
+    .inputRow input{flex:1;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+        <div style="letter-spacing:.10em; text-transform:uppercase; font-size:12px; color:var(--dim);">
+          NRW Noir · Play Adventure
+        </div>
+        <div class="status" id="status">Bereit.</div>
+      </div>
+
+      <div class="row">
+        <div style="min-width:260px; flex:1;">
+          <label>Adventure</label>
+          <select id="advSelect"></select>
+        </div>
+
+        <button class="btn primary" id="btnStart">Start</button>
+        <button class="btn" id="btnContinue">Continue</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+
+      <div class="row">
+        <div style="flex:1; min-width:260px;">
+          <label>Freitext</label>
+          <div class="inputRow">
+            <input id="freeInput" placeholder="z.B. nimm schlüssel · untersuche tür · sprich mit wache" />
+            <button class="btn" id="btnSend">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h3>Quick Actions</h3>
+        <div class="body">
+          <div>
+            <div class="status">Richtungen</div>
+            <div class="chips" id="dirChips"></div>
+          </div>
+          <div>
+            <div class="status">Verben</div>
+            <div class="chips" id="verbChips"></div>
+          </div>
+          <div>
+            <div class="status">Kontext (Raum / Items / NPCs)</div>
+            <div class="chips" id="ctxChips"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Adventure Output</h3>
+        <div id="output"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./playadventure/playadventure.js"></script>
+</body>
+</html>
