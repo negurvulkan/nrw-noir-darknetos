@@ -52,13 +52,16 @@ export function renderActorSidebar({ container, actors = [], selection, onSelect
     list.appendChild(row);
   });
   const btnRow = document.createElement('div');
-  btnRow.style.display = 'flex';
+  btnRow.style.display = 'grid';
+  btnRow.style.gridTemplateColumns = '1fr';
   btnRow.style.gap = '6px';
   const btnNewNpc = document.createElement('button');
   btnNewNpc.textContent = 'Neuer NPC';
+  btnNewNpc.style.width = '100%';
   btnNewNpc.onclick = onAddNpc;
   const btnNewEnemy = document.createElement('button');
   btnNewEnemy.textContent = 'Neuer Gegner';
+  btnNewEnemy.style.width = '100%';
   btnNewEnemy.onclick = onAddEnemy;
   btnRow.append(btnNewNpc, btnNewEnemy);
   btnRow.style.marginTop = '8px';
@@ -71,34 +74,31 @@ export function renderActorEditor(actor, ctx) {
   card.className = 'card';
   card.appendChild(header(actor));
 
-  card.appendChild(fieldGrid([
-    inputField('ID', actor.id, (v) => onUpdateActor('id', slugify(v) || actor.id)),
-    inputField('Name', actor.name, (v) => onUpdateActor('name', v)),
-    selectField('Raum', actor.room, rooms.map(r => ({ value: r.id, label: r.title || r.id })), (v) => onUpdateActor('room', v)),
-    actor.type === 'npc'
-      ? selectField('Start-Dialognode', actor.dialog_start, getDialogNodeOptions(dialogs, actor.id), (v) => onUpdateActor('dialog_start', v))
-      : null,
-  ].filter(Boolean)));
-
-  card.appendChild(textArea('Beschreibung', actor.description || '', (v) => onUpdateActor('description', v)));
+  card.appendChild(section('Stammdaten', [
+    fieldGrid([
+      inputField('ID', actor.id, (v) => onUpdateActor('id', slugify(v) || actor.id)),
+      inputField('Name', actor.name, (v) => onUpdateActor('name', v)),
+      selectField('Raum', actor.room, rooms.map(r => ({ value: r.id, label: r.title || r.id })), (v) => onUpdateActor('room', v)),
+      actor.type === 'npc'
+        ? selectField('Start-Dialognode', actor.dialog_start, getDialogNodeOptions(dialogs, actor.id), (v) => onUpdateActor('dialog_start', v))
+        : null,
+    ].filter(Boolean)),
+    textArea('Beschreibung', actor.description || '', (v) => onUpdateActor('description', v)),
+  ]));
 
   if (actor.type === 'npc') {
-    card.appendChild(flagFields('Nur anzeigen wenn Flag', actor.only_if_flag, (flag) => onUpdateActor('only_if_flag', normalizeFlag(flag))));
-    card.appendChild(flagFields('Verstecken wenn Flag', actor.hidden_if_flag, (flag) => onUpdateActor('hidden_if_flag', normalizeFlag(flag))));
-    card.appendChild(npcDialogStatus(actor, dialogs));
+    const dialogSection = section('Dialog & Sichtbarkeit', [
+      flagFields('Nur anzeigen wenn Flag', actor.only_if_flag, (flag) => onUpdateActor('only_if_flag', normalizeFlag(flag))),
+      flagFields('Verstecken wenn Flag', actor.hidden_if_flag, (flag) => onUpdateActor('hidden_if_flag', normalizeFlag(flag))),
+      npcDialogStatus(actor, dialogs),
+    ]);
 
-    const actions = document.createElement('div');
-    actions.className = 'dialog-actions';
-    const editDialog = document.createElement('button');
-    editDialog.className = 'primary';
-    editDialog.textContent = 'Dialog bearbeiten';
-    editDialog.onclick = () => onOpenDialog(actor.id);
-    const del = document.createElement('button');
-    del.className = 'danger';
-    del.textContent = 'NPC löschen';
-    del.onclick = () => onDelete(actor.id);
-    actions.append(editDialog, del);
-    card.appendChild(actions);
+    dialogSection.appendChild(actionRow([
+      { label: 'Dialog bearbeiten', className: 'primary', onClick: () => onOpenDialog(actor.id) },
+      { label: 'NPC löschen', className: 'danger', onClick: () => onDelete(actor.id) },
+    ]));
+
+    card.appendChild(dialogSection);
   }
 
   if (actor.type === 'enemy') {
@@ -115,38 +115,36 @@ export function renderActorEditor(actor, ctx) {
     if (input) input.setAttribute('list', datalistId);
     asciiField.appendChild(datalist);
     const fontField = inputField('ASCII Font Size', actor.ascii?.fontSize ?? '', (v) => onUpdateEnemyAscii('fontSize', v), 'number');
-    card.appendChild(fieldGrid([asciiField, fontField]));
 
-    card.appendChild(fieldGrid([
-      inputField('HP', actor.stats?.hp ?? '', (v) => onUpdateEnemyStat('hp', v), 'number'),
-      inputField('Angriff', actor.stats?.attack ?? '', (v) => onUpdateEnemyStat('attack', v), 'number'),
-      inputField('Verteidigung', actor.stats?.defense ?? '', (v) => onUpdateEnemyStat('defense', v), 'number'),
-    ]));
+    const statsSection = section('Aussehen & Stats', [
+      fieldGrid([asciiField, fontField]),
+      fieldGrid([
+        inputField('HP', actor.stats?.hp ?? '', (v) => onUpdateEnemyStat('hp', v), 'number'),
+        inputField('Angriff', actor.stats?.attack ?? '', (v) => onUpdateEnemyStat('attack', v), 'number'),
+        inputField('Verteidigung', actor.stats?.defense ?? '', (v) => onUpdateEnemyStat('defense', v), 'number'),
+      ]),
+      fieldGrid([
+        inputField('Flucht-Wahrscheinlichkeit', actor.behavior?.fleeDifficulty ?? '', (v) => onUpdateEnemyBehavior('fleeDifficulty', v), 'number')
+      ]),
+      widgets.multiselectField
+        ? widgets.multiselectField('Beute (Items)', ctx.items || [], actor.drops || [], (vals) => onUpdateActor('drops', vals))
+        : null,
+    ].filter(Boolean));
 
-    card.appendChild(fieldGrid([
-      inputField('Flucht-Wahrscheinlichkeit', actor.behavior?.fleeDifficulty ?? '', (v) => onUpdateEnemyBehavior('fleeDifficulty', v), 'number')
-    ]));
-
-    if (widgets.multiselectField) {
-      card.appendChild(widgets.multiselectField('Beute (Items)', ctx.items || [], actor.drops || [], (vals) => onUpdateActor('drops', vals)));
-    }
+    card.appendChild(statsSection);
 
     if (widgets.eventArea) {
-      card.appendChild(widgets.eventArea('On Attack', actor.hooks?.on_attack || [], (val) => onUpdateEnemyHook('on_attack', val)));
-      card.appendChild(widgets.eventArea('On Hit', actor.hooks?.on_hit || [], (val) => onUpdateEnemyHook('on_hit', val)));
-      card.appendChild(widgets.eventArea('On Miss', actor.hooks?.on_miss || [], (val) => onUpdateEnemyHook('on_miss', val)));
-      card.appendChild(widgets.eventArea('On Defeat', actor.hooks?.on_defeat || [], (val) => onUpdateEnemyHook('on_defeat', val)));
+      card.appendChild(section('Kampf-Hooks', [
+        widgets.eventArea('On Attack', actor.hooks?.on_attack || [], (val) => onUpdateEnemyHook('on_attack', val)),
+        widgets.eventArea('On Hit', actor.hooks?.on_hit || [], (val) => onUpdateEnemyHook('on_hit', val)),
+        widgets.eventArea('On Miss', actor.hooks?.on_miss || [], (val) => onUpdateEnemyHook('on_miss', val)),
+        widgets.eventArea('On Defeat', actor.hooks?.on_defeat || [], (val) => onUpdateEnemyHook('on_defeat', val)),
+      ]));
     }
 
-    const actions = document.createElement('div');
-    actions.style.display = 'flex';
-    actions.style.gap = '10px';
-    const del = document.createElement('button');
-    del.className = 'danger';
-    del.textContent = 'Gegner löschen';
-    del.onclick = () => onDelete(actor.id);
-    actions.appendChild(del);
-    card.appendChild(actions);
+    card.appendChild(actionRow([
+      { label: 'Gegner löschen', className: 'danger', onClick: () => onDelete(actor.id) },
+    ]));
   }
 
   return card;
@@ -173,6 +171,27 @@ function fieldGrid(fields) {
   grid.className = 'form-grid';
   fields.forEach(f => f && grid.appendChild(f));
   return grid;
+}
+
+function section(title, nodes) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-section';
+  wrap.appendChild(sectionTitle(title));
+  nodes.filter(Boolean).forEach(node => wrap.appendChild(node));
+  return wrap;
+}
+
+function actionRow(buttons) {
+  const actions = document.createElement('div');
+  actions.className = 'dialog-actions';
+  buttons.forEach(btn => {
+    const b = document.createElement('button');
+    if (btn.className) b.className = btn.className;
+    b.textContent = btn.label;
+    b.onclick = btn.onClick;
+    actions.appendChild(b);
+  });
+  return actions;
 }
 
 function inputField(label, value, onChange, type = 'text') {
