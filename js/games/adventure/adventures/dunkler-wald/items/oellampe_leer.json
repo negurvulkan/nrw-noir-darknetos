@@ -1,0 +1,7 @@
+{
+  "id": "oellampe_leer",
+  "name": "Öllampe (leer)",
+  "description": "Eine leere Metalllampe. Der Docht ist versenkt, bis wieder Öl darin ist.",
+  "pickup": true,
+  "stackable": false
+}

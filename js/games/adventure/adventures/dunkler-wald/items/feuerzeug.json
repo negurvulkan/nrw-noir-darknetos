@@ -1,0 +1,7 @@
+{
+  "id": "feuerzeug",
+  "name": "Altes Feuerzeug",
+  "description": "Ein zerkratztes Feuerzeug mit schwacher Flamme. Reicht gerade, um Dochte zu entzünden.",
+  "pickup": true,
+  "stackable": false
+}

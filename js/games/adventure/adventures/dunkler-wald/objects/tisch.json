@@ -1,0 +1,8 @@
+{
+  "id": "tisch",
+  "name": "Arbeitstisch",
+  "description": "Ein stabiler Holztisch mit Brandflecken und Ölringen. Perfekt, um etwas zusammenzubauen.",
+  "locked": false,
+  "inspect": [],
+  "use": []
+}

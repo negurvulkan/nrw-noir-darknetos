@@ -4,7 +4,7 @@
   "description": "Ein schmaler Pfad windet sich durch den dunklen Wald. Nebel schleicht zwischen den Stämmen hindurch. Wege führen nach Norden und Osten.",
   "exits": { "nord": "nebellichtung", "ost": "wurzelpfad" },
   "objects": [],
-  "items": ["zerknuellte_karte"],
+  "items": ["zerknuellte_karte", "feuerzeug"],
   "enemies": [],
   "on_enter": [],
   "on_first_enter": []

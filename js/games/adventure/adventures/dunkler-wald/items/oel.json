@@ -1,0 +1,9 @@
+{
+  "id": "oel",
+  "name": "Altes Lampenöl",
+  "description": "Dickes, ranziges Öl in einer kleinen Flasche. Es riecht streng, sollte aber noch brennen.",
+  "pickup": true,
+  "stackable": true,
+  "unit": "flasche",
+  "maxStack": 5
+}
