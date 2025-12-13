@@ -138,7 +138,7 @@ async function handleEvent(event, state, ctx) {
       } else {
         state.roomSpawns = state.roomSpawns || {};
         const roomId = event.room || state.location;
-        state.roomSpawns[roomId] = state.roomSpawns[roomId] || { items: [], enemies: [], npcs: [] };
+        state.roomSpawns[roomId] = state.roomSpawns[roomId] || { items: [], actors: [] };
         state.roomSpawns[roomId].items.push({ id: event.id, qty });
       }
       ctx?.saveState?.();
@@ -147,17 +147,21 @@ async function handleEvent(event, state, ctx) {
     case 'spawn_enemy': {
       const qty = normalizeQty(event.qty);
       if (ctx?.spawnEnemy) {
-        ctx.spawnEnemy(event.room || state.location, event.id, qty);
+        await ctx.spawnEnemy(event.room || state.location, event.id, qty);
       }
       ctx?.saveState?.();
       break;
     }
     case 'spawn_npc': {
       if (ctx?.spawnNpc) {
-        ctx.spawnNpc(event.room || state.location, event.id);
+        await ctx.spawnNpc(event.room || state.location, event.id);
       } else {
-        state.npcs = state.npcs || {};
-        state.npcs[event.id] = { room: event.room || state.location, flags: {}, counters: {} };
+        state.actors = state.actors || {};
+        state.actorFlags = state.actorFlags || {};
+        state.npcs = state.actors;
+        state.npcFlags = state.actorFlags;
+        state.actors[event.id] = { room: event.room || state.location, flags: {}, counters: {} };
+        state.actorFlags[event.id] = state.actors[event.id].flags;
       }
       ctx?.saveState?.();
       break;
