@@ -58,9 +58,57 @@ function parseDirection(word) {
 }
 
 /**
+ * Parse combine-ish input (kombiniere/benutze/use) into a unified payload:
+ * { verb:'combine', items:[...], station, object, target, raw }
+ */
+function parseCombinePayload(lower, raw) {
+  // akzeptiert:
+  // - kombiniere ...
+  // - benutze/nutze/verwende ...
+  // - use ...
+  const headMatch = lower.match(/^(kombiniere|kombinieren|combine|benutze|nutze|verwende|use)\s+(.+)$/);
+  if (!headMatch) return null;
+
+  let rest = (headMatch[2] || '').trim();
+  if (!rest) {
+    return { verb: 'combine', items: [], station: null, raw, object: null, target: null, direction: null };
+  }
+
+  // optional: "use X with Y" -> wir können "with" später im Split behandeln
+  // optional Station: "... auf/an/on/at tisch"
+  let station = null;
+  const stationMatch = rest.match(/(.+?)\s+(auf|an|on|at)\s+(.+)$/);
+  if (stationMatch) {
+    rest = (stationMatch[1] || '').trim();
+    station = (stationMatch[3] || '').trim();
+  }
+
+  // Items trennen: "mit/und/with/and"
+  // ✅ NON-capturing, damit "mit" nicht als Token im Array landet
+  const items = rest
+    .split(/\s+(?:mit|with|und|and)\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (!items.length) {
+    return { verb: 'combine', items: [], station: station || null, raw, object: null, target: null, direction: null };
+  }
+
+  return {
+    verb: 'combine',
+    items,
+    station: station || null,
+    raw,
+    object: items[0] || null,
+    target: items[1] || null,
+    direction: null
+  };
+}
+
+/**
  * Parse user input into a normalized action descriptor.
  * @param {string} text
- * @returns {{verb:string|null, object:string|null, target:string|null, direction:string|null, raw:string}}
+ * @returns {{verb:string|null, object:string|null, target:string|null, direction:string|null, raw:string, items?:string[], station?:string|null}}
  */
 export function parseInput(text) {
   const raw = text;
@@ -71,20 +119,9 @@ export function parseInput(text) {
     return { verb: null, object: null, target: null, direction: null, raw };
   }
 
-  // Spezialfall: "benutze X mit Y" / "nutze X mit Y" / "verwende X mit Y" / "use X with Y"
-  const combineMatch =
-    lower.match(/^(benutze|nutze|verwende)\s+(.+?)\s+mit\s+(.+)$/) ||
-    lower.match(/^use\s+(.+?)\s+with\s+(.+)$/);
-  
-  if (combineMatch) {
-    // Deutsch: [1]=verbwort, [2]=obj, [3]=target
-    if (combineMatch[1] !== 'use') {
-      return { verb: 'combine', object: combineMatch[2].trim(), target: combineMatch[3].trim(), direction: null, raw };
-    }
-  
-    // Englisch: [1]=obj, [2]=target
-    return { verb: 'combine', object: combineMatch[1].trim(), target: combineMatch[2].trim(), direction: null, raw };
-  }
+  // ✅ NEU: Combine/Benutze/Use früh abfangen (inkl. mehrere Items + Station)
+  const combinePayload = parseCombinePayload(lower, raw);
+  if (combinePayload) return combinePayload;
 
   const tokens = lower.split(/\s+/);
 
@@ -101,26 +138,7 @@ export function parseInput(text) {
   let object = null;
   let target = null;
 
-  // combine hat eigenes Schema: mehrere Items + optionale Station
-  if (verb === 'combine') {
-    const withoutVerb = lower.replace(/^kombiniere\s+/, '').replace(/^kombinieren\s+/, '').replace(/^combine\s+/, '');
-    // Station optional nach "auf" oder "on"
-    let station = null;
-    let itemPart = withoutVerb;
-    const stationMatch = withoutVerb.match(/(.+?)\s+(auf|on)\s+(.+)/);
-    if (stationMatch) {
-      itemPart = (stationMatch[1] || '').trim();
-      station = (stationMatch[3] || '').trim();
-    }
-
-    const itemTokens = itemPart
-      .split(/\s+(?:mit|with|und|and)\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    const items = itemTokens.length ? itemTokens : (itemPart ? [itemPart.trim()] : []);
-    return { verb, items, station: station || null, raw, object: items[0] || null, target: items[1] || null, direction: null };
-  } else if (verb === 'go') {
+  if (verb === 'go') {
     // attempt to find direction after verb
     const dirToken = tokens.find((t) => DIRECTION_ALIASES[t]);
     direction = dirToken ? parseDirection(dirToken) : null;
