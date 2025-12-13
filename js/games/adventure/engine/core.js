@@ -1,6 +1,6 @@
 // Core adventure engine logic.
 import { parseInput } from './parser.js';
-import { loadJson, loadAscii } from './loader.js';
+import { loadJson, loadAscii, loadActorJson } from './loader.js';
 import { runEvents } from './events.js';
 import { startCombat, handleCombatAction } from './combat.js';
 import { ADVENTURE_INDEX, getCurrentAdventure, getDataRoot, setCurrentAdventure } from './config.js';
@@ -33,6 +33,8 @@ const createEmptyCache = () => ({
   actors: {},
   dialogs: {},
   itemIds: [],
+  actorIds: [],
+  actorIndexLoaded: false,
   recipeIndexBuilt: false
 });
 
@@ -429,33 +431,29 @@ async function loadObject(id) {
 
 async function loadActor(id) {
   if (!id) return null;
+  if (!cache.actorIndexLoaded) {
+    await loadActorIndex();
+  }
   if (!cache.actors[id]) {
-    const attempts = [
-      { path: `actors/${id}.json` },
-      { path: `npcs/${id}.json`, type: 'npc' },
-      { path: `enemies/${id}.json`, type: 'enemy' }
-    ];
-    let lastError = null;
-    for (const attempt of attempts) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const data = await loadJson(attempt.path);
-        cache.actors[id] = {
-          ...data,
-          type: data.type || attempt.type || (data.stats ? 'enemy' : 'npc')
-        };
-        break;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    if (!cache.actors[id]) {
-      throw lastError;
-    }
+    cache.actors[id] = await loadActorJson(id);
   }
   const actorId = cache.actors[id].id || id;
+  const hasStats = cache.actors[id].stats && Object.keys(cache.actors[id].stats).length;
   cache.actors[id].id = actorId;
-  cache.actors[id].type = cache.actors[id].type || (cache.actors[id].stats ? 'enemy' : 'npc');
+  cache.actors[id].type = cache.actors[id].type || (hasStats ? 'enemy' : 'npc');
+  if (!cache.actors[id].stats && cache.actors[id].type === 'enemy') {
+    cache.actors[id].stats = { ...defaultStats };
+  }
+  const combat = cache.actors[id].combat || {};
+  if (combat.enabled === undefined) {
+    combat.enabled = cache.actors[id].type === 'enemy' && !!cache.actors[id].stats;
+  }
+  cache.actors[id].combat = combat;
+
+  cache.actorIds = cache.actorIds || [];
+  if (!cache.actorIds.includes(actorId)) {
+    cache.actorIds.push(actorId);
+  }
 
   const actorState = ensureActorState(actorId, cache.actors[id]?.room);
   if (cache.actors[id].flags && Object.keys(cache.actors[id].flags).length && !Object.keys(actorState.flags).length) {
@@ -528,6 +526,25 @@ async function loadItemIndex() {
   }
   cache.itemIds = cache.itemIds || [];
   return cache.itemIds;
+}
+
+async function loadActorIndex() {
+  if (cache.actorIds && cache.actorIds.length) {
+    return cache.actorIds;
+  }
+  cache.actorIndexLoaded = true;
+  try {
+    const index = await loadJson('actors/index.json');
+    if (Array.isArray(index)) {
+      cache.actorIds = index;
+      return cache.actorIds;
+    }
+  } catch (err) {
+    console.warn('Akteur-Index konnte nicht geladen werden:', err);
+  }
+
+  cache.actorIds = cache.actorIds || [];
+  return cache.actorIds;
 }
 
 function registerRecipeFromItem(item) {
