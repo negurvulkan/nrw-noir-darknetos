@@ -7,8 +7,8 @@ const slugify = (str = '') => str
   .replace(/-+/g, '-');
 
 export function ensureNpcCollection(data) {
-  if (!data.npcs) data.npcs = [];
-  return data.npcs;
+  if (!data.actors) data.actors = [];
+  return data.actors.filter(actor => actor.type === 'npc');
 }
 
 export function createNpcDraft(name = 'Neuer NPC') {
@@ -24,13 +24,13 @@ export function createNpcDraft(name = 'Neuer NPC') {
   };
 }
 
-export function renderNpcSidebar({ container, state, selection, onSelect, onAdd }) {
+export function renderNpcSidebar({ container, selection, onSelect, onAdd, npcs = [] }) {
   container.appendChild(sectionTitle('NPCs'));
   const list = document.createElement('div');
   list.className = 'nav-list';
-  (state.data.npcs || []).forEach(npc => {
+  (npcs || []).forEach(npc => {
     const row = document.createElement('div');
-    row.className = 'nav-item' + (selection.npcId === npc.id && selection.view === 'npc' ? ' active' : '');
+    row.className = 'nav-item' + (selection.actorId === npc.id && selection.view === 'npc' ? ' active' : '');
     row.textContent = npc.name || npc.id;
     row.onclick = () => onSelect(npc.id);
     list.appendChild(row);
