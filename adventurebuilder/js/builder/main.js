@@ -1,6 +1,6 @@
 import { Api } from './api.js';
 import { initEventBlockEditor } from './event-blockly.js';
-import { renderNpcSidebar, renderNpcEditor, createNpcDraft } from './npcs.js';
+import { renderNpcEditor, createNpcDraft } from './npcs.js';
 import { dialogGraphInfo, ensureDialogState, ensureDialogForNpc, nodeIds } from './dialogs.js';
 import { renderDialogEditor } from './dialogEditor.js';
 import { autoLayout, renderDialogMap } from './dialogMap.js';
@@ -27,6 +27,13 @@ const modalTitle = document.getElementById('modal-title');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
 const aiButton = document.getElementById('btn-ai');
+
+const ACTOR_TYPES = [
+  { value: 'npc', label: 'NPC' },
+  { value: 'dialogue', label: 'Dialog' },
+  { value: 'enemy', label: 'Gegner' },
+];
+const DIALOG_ACTOR_TYPES = ['npc', 'dialogue'];
 
 function isFiniteNumber(val) {
   return typeof val === 'number' && Number.isFinite(val);
@@ -65,6 +72,7 @@ function defaultSelection(overrides = {}) {
     objectId: null,
     actorId: null,
     actorType: null,
+    actorFilter: 'all',
     dialogId: null,
     dialogNodeId: null,
     dialogMode: 'editor',
@@ -116,7 +124,7 @@ function openAiAssistModal() {
   entitySection.innerHTML = '<h4>Name & Beschreibung</h4><p class="hint">Erzeugt Vorschläge für das aktuell ausgewählte Entity.</p>';
   const entityControls = document.createElement('div');
   entityControls.className = 'ai-controls';
-  const entityType = labeledSelect('Entity-Typ', ['room', 'item', 'object', 'npc', 'enemy'], currentEntityType());
+  const entityType = labeledSelect('Entity-Typ', ['room', 'item', 'object', 'npc', 'dialogue', 'enemy'], currentEntityType());
   const seedInput = labeledTextarea('Stichworte / Seed');
   entityControls.append(entityType.wrap, seedInput.wrap);
   const entityBtn = document.createElement('button');
@@ -281,7 +289,7 @@ function buildAiPayload(mode, options) {
 
 function existingIdsFor(entityType) {
   if (!state.data) return [];
-  if (entityType === 'npc' || entityType === 'enemy') {
+  if (['npc', 'enemy', 'dialogue'].includes(entityType)) {
     return actorsOfType(entityType).map(actor => actor.id).filter(Boolean);
   }
   const map = { room: 'rooms', item: 'items', object: 'objects' };
@@ -310,9 +318,14 @@ function normalizeEnemyHooks(enemy, options = {}) {
   return enemy;
 }
 
-function normalizeEnemies(data, options = {}) {
-  const enemies = (data.actors || []).filter(actor => getActorType(actor) === 'enemy');
-  enemies.forEach(enemy => normalizeEnemyHooks(enemy, options));
+function actorSupportsDialog(actorOrType) {
+  const type = typeof actorOrType === 'string' ? actorOrType : getActorType(actorOrType);
+  return DIALOG_ACTOR_TYPES.includes(type);
+}
+
+function normalizeActors(data, options = {}) {
+  ensureActorCollection(data);
+  (data.actors || []).forEach(actor => applyActorTypeDefaults(data, actor, options));
 }
 
 function getActorType(actor) {
@@ -333,10 +346,34 @@ function ensureActorCollection(data) {
     const key = `enemy:${enemy.id}`;
     if (!existing.has(key)) existing.set(key, { ...normalizeEnemyHooks(enemy), type: 'enemy' });
   });
-  data.actors = Array.from(existing.values());
+  data.actors = Array.from(existing.values()).map(actor => ({ ...actor, type: actor.type || getActorType(actor) }));
   delete data.npcs;
   delete data.enemies;
   return data.actors;
+}
+
+function applyActorTypeDefaults(data, actor, options = {}) {
+  const type = getActorType(actor);
+  actor.type = type;
+  if (type === 'enemy') {
+    normalizeEnemyHooks(actor, options);
+    actor.stats = actor.stats || { hp: 10, attack: 1, defense: 0 };
+    actor.behavior = actor.behavior || { fleeDifficulty: 0 };
+    actor.drops = Array.isArray(actor.drops) ? actor.drops : [];
+  }
+  if (actorSupportsDialog(type)) {
+    actor.dialog_start = actor.dialog_start || 'start';
+    ensureDialogForNpc(data, actor.id);
+  }
+}
+
+function normalizeEnemies(data, options = {}) {
+  normalizeActors(data, options);
+}
+
+function actorTypeLabel(type) {
+  const entry = ACTOR_TYPES.find(t => t.value === type);
+  return entry ? entry.label : (type || 'Unbekannt');
 }
 
 function actorsOfType(type) {
@@ -354,13 +391,13 @@ function stripActorType(actor) {
 }
 
 function currentEntityType() {
+  const actor = getSelectedActor();
+  if (actor) return getActorType(actor);
   if (state.selection.view === 'room') return 'room';
   if (state.selection.view === 'item') return 'item';
   if (state.selection.view === 'object') return 'object';
   if (state.selection.view === 'enemy' || state.selection.actorType === 'enemy') return 'enemy';
   if (state.selection.view === 'npc' || state.selection.actorType === 'npc') return 'npc';
-  const actor = getSelectedActor();
-  if (actor) return getActorType(actor);
   return 'room';
 }
 
@@ -398,7 +435,7 @@ function eventTargets() {
 function getSelectedEntity(entityType) {
   if (!state.data) return null;
   const map = { room: { key: 'rooms', sel: 'roomId' }, item: { key: 'items', sel: 'itemId' }, object: { key: 'objects', sel: 'objectId' } };
-  if (entityType === 'npc' || entityType === 'enemy') return getSelectedActor();
+  if (entityType === 'npc' || entityType === 'enemy' || entityType === 'dialogue') return getSelectedActor();
   const info = map[entityType];
   if (!info) return null;
   const id = state.selection[info.sel];
@@ -595,9 +632,8 @@ async function openAdventure(id) {
     const res = await Api.loadAdventure(id);
     state.currentAdventure = res.adventure || state.adventures.find(a => a.id === id) || { id };
     state.data = res.data || res;
-    ensureActorCollection(state.data);
-    normalizeEnemies(state.data);
     ensureDialogState(state.data);
+    normalizeActors(state.data);
     state.asciiFiles = res.ascii || res.asciiFiles || [];
     state.selection = defaultSelection();
     state.map = { scale: 1, x: 0, y: 0 };
@@ -671,30 +707,7 @@ function renderSidebar() {
   sidebar.appendChild(objectList);
   sidebar.appendChild(btnNewObject);
 
-  sidebar.appendChild(sectionTitle('Gegner'));
-  const enemyList = document.createElement('div');
-  enemyList.className = 'nav-list';
-  actorsOfType('enemy').forEach(enemy => {
-    const row = document.createElement('div');
-    row.className = 'nav-item' + (state.selection.actorId === enemy.id && state.selection.view === 'enemy' ? ' active' : '');
-    row.textContent = enemy.name || enemy.id;
-    row.onclick = () => { state.selection = defaultSelection({ view: 'enemy', actorId: enemy.id, actorType: 'enemy' }); renderEditor(); renderSidebar(); };
-    enemyList.appendChild(row);
-  });
-  const btnNewEnemy = document.createElement('button');
-  btnNewEnemy.textContent = 'Neuer Gegner';
-  btnNewEnemy.style.marginTop = '8px';
-  btnNewEnemy.onclick = () => addActor('enemy');
-  sidebar.appendChild(enemyList);
-  sidebar.appendChild(btnNewEnemy);
-
-  renderNpcSidebar({
-    container: sidebar,
-    npcs: actorsOfType('npc'),
-    selection: state.selection,
-    onSelect: (id) => { state.selection = defaultSelection({ view: 'npc', actorId: id, actorType: 'npc' }); renderEditor(); renderSidebar(); },
-    onAdd: () => addActor('npc'),
-  });
+  renderActorSidebar();
 }
 
 function sectionTitle(label) {
@@ -702,6 +715,74 @@ function sectionTitle(label) {
   el.className = 'section-title';
   el.textContent = label;
   return el;
+}
+
+function renderActorSidebar() {
+  sidebar.appendChild(sectionTitle('Actors'));
+
+  const controls = document.createElement('div');
+  controls.className = 'nav-controls';
+
+  const filterSelect = document.createElement('select');
+  const filterOptions = [{ value: 'all', label: 'Alle' }].concat(ACTOR_TYPES);
+  filterOptions.forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    if (state.selection.actorFilter === opt.value) o.selected = true;
+    filterSelect.appendChild(o);
+  });
+  filterSelect.onchange = () => {
+    state.selection = { ...state.selection, actorFilter: filterSelect.value };
+    renderSidebar();
+  };
+
+  const addSelect = document.createElement('select');
+  ACTOR_TYPES.forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    if (opt.value === (state.selection.actorFilter === 'all' ? 'npc' : state.selection.actorFilter)) o.selected = true;
+    addSelect.appendChild(o);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.textContent = 'Actor hinzufügen';
+  addBtn.onclick = () => addActor(addSelect.value);
+
+  controls.append(filterSelect, addSelect, addBtn);
+  sidebar.appendChild(controls);
+
+  const list = document.createElement('div');
+  list.className = 'nav-list';
+  const actors = (state.data.actors || [])
+    .filter(actor => state.selection.actorFilter === 'all' || getActorType(actor) === state.selection.actorFilter)
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  if (!actors.length) {
+    const empty = document.createElement('div');
+    empty.className = 'nav-item muted';
+    empty.textContent = 'Keine Actors';
+    list.appendChild(empty);
+  }
+  actors.forEach(actor => {
+    const row = document.createElement('div');
+    const type = getActorType(actor);
+    row.className = 'nav-item' + (state.selection.actorId === actor.id && state.selection.view === 'actor' ? ' active' : '');
+    row.onclick = () => { state.selection = defaultSelection({ view: 'actor', actorId: actor.id, actorType: type, actorFilter: state.selection.actorFilter }); renderEditor(); renderSidebar(); };
+
+    const badge = document.createElement('span');
+    badge.className = 'badge ghost';
+    badge.textContent = actorTypeLabel(type);
+
+    const label = document.createElement('span');
+    label.textContent = actor.name || actor.id;
+    label.style.marginLeft = '6px';
+
+    row.append(badge, label);
+    list.appendChild(row);
+  });
+
+  sidebar.appendChild(list);
 }
 
 function renderEditor() {
@@ -715,10 +796,8 @@ function renderEditor() {
     renderItemEditor();
   } else if (state.selection.view === 'object') {
     renderObjectEditor();
-  } else if (state.selection.view === 'enemy') {
-    renderEnemyEditor();
-  } else if (state.selection.view === 'npc') {
-    renderNpcView();
+  } else if (state.selection.view === 'enemy' || state.selection.view === 'npc' || state.selection.view === 'actor') {
+    renderActorEditor();
   } else if (state.selection.view === 'dialog') {
     renderDialogView();
   }
@@ -937,17 +1016,25 @@ function renderObjectEditor() {
   viewEl.appendChild(card);
 }
 
-function renderEnemyEditor() {
-  const enemy = getSelectedActor();
-  if (!enemy || getActorType(enemy) !== 'enemy') return;
-  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> Gegner: ${enemy.id}</div>`;
+function renderEnemyPanel(enemy, options = {}) {
+  const { includeIdentity = false, showDelete = true, title } = options;
   const card = document.createElement('div');
   card.className = 'card';
 
-  card.appendChild(createFieldGrid([
-    field('ID', 'text', enemy.id, (v) => updateEnemy(enemy, 'id', v)),
-    field('Name', 'text', enemy.name, (v) => updateEnemy(enemy, 'name', v)),
-  ]));
+  if (title !== false) {
+    const header = document.createElement('div');
+    header.className = 'badge';
+    header.innerHTML = `<span class="dot"></span> ${title || 'Gegner ' + enemy.id}`;
+    card.appendChild(header);
+  }
+
+  const identityFields = [];
+  if (includeIdentity) {
+    identityFields.push(
+      field('ID', 'text', enemy.id, (v) => updateEnemy(enemy, 'id', v)),
+      field('Name', 'text', enemy.name, (v) => updateEnemy(enemy, 'name', v)),
+    );
+  }
 
   const asciiGrid = document.createElement('div');
   asciiGrid.className = 'form-grid';
@@ -972,6 +1059,8 @@ function renderEnemyEditor() {
 
   const fontField = field('ASCII Font Size', 'number', enemy.ascii?.fontSize ?? '', (v) => updateEnemyAscii(enemy, 'fontSize', v));
   asciiGrid.append(asciiField, fontField);
+
+  if (identityFields.length) card.appendChild(createFieldGrid(identityFields));
   card.appendChild(asciiGrid);
 
   const desc = document.createElement('div');
@@ -1006,37 +1095,95 @@ function renderEnemyEditor() {
   card.appendChild(eventArea('On Miss', enemy.hooks?.on_miss || [], (val) => updateEnemyHook(enemy, 'on_miss', val)));
   card.appendChild(eventArea('On Defeat', enemy.hooks?.on_defeat || [], (val) => updateEnemyHook(enemy, 'on_defeat', val)));
 
-  const actions = document.createElement('div');
-  actions.style.display = 'flex';
-  actions.style.gap = '10px';
-  const del = document.createElement('button');
-  del.className = 'danger';
-  del.textContent = 'Gegner löschen';
-  del.onclick = () => deleteActor(enemy.id);
-  actions.appendChild(del);
-  card.appendChild(actions);
+  if (showDelete) {
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.gap = '10px';
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'Gegner löschen';
+    del.onclick = () => deleteActor(enemy.id);
+    actions.appendChild(del);
+    card.appendChild(actions);
+  }
 
-  viewEl.appendChild(card);
+  return card;
 }
 
-function renderNpcView() {
-  const npc = getSelectedActor();
-  if (!npc || getActorType(npc) !== 'npc') return;
-  ensureDialogForNpc(state.data, npc.id);
-  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> NPC: ${npc.id}</div>`;
-  const card = renderNpcEditor(npc, {
-    rooms: state.data.rooms || [],
-    dialogs: state.data.dialogs || {},
-    setDirty,
-    onDelete: deleteActor,
-    onOpenDialog: (id) => {
-      ensureDialogForNpc(state.data, id);
-      state.selection = defaultSelection({ view: 'dialog', dialogId: id, dialogNodeId: null, actorId: id, actorType: 'npc' });
+function renderActorEditor() {
+  const actor = getSelectedActor();
+  if (!actor) return;
+  applyActorTypeDefaults(state.data, actor);
+  const type = getActorType(actor);
+
+  viewHeader.innerHTML = `<div class="badge"><span class="dot"></span> ${actorTypeLabel(type)}: ${actor.id}</div>`;
+
+  const baseCard = document.createElement('div');
+  baseCard.className = 'card';
+  baseCard.appendChild(createFieldGrid([
+    field('ID', 'text', actor.id, (v) => updateActorId(actor, v)),
+    field('Name', 'text', actor.name, (v) => updateActor(actor, 'name', v)),
+    actorTypeField(actor),
+  ]));
+
+  const actions = document.createElement('div');
+  actions.className = 'dialog-actions';
+  if (actorSupportsDialog(type)) {
+    const dialogBtn = document.createElement('button');
+    dialogBtn.className = 'ghost';
+    dialogBtn.textContent = 'Dialog öffnen';
+    dialogBtn.onclick = () => {
+      ensureDialogForNpc(state.data, actor.id);
+      state.selection = defaultSelection({ view: 'dialog', dialogId: actor.id, dialogNodeId: null, actorId: actor.id, actorType: type, actorFilter: state.selection.actorFilter });
       renderEditor();
       renderSidebar();
-    },
+    };
+    actions.appendChild(dialogBtn);
+  }
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.textContent = 'Actor löschen';
+  del.onclick = () => deleteActor(actor.id);
+  actions.appendChild(del);
+  baseCard.appendChild(actions);
+
+  viewEl.appendChild(baseCard);
+
+  if (type === 'enemy') {
+    viewEl.appendChild(renderEnemyPanel(actor, { title: 'Gegner-Details', showDelete: false }));
+  } else {
+    const card = renderNpcEditor(actor, {
+      rooms: state.data.rooms || [],
+      dialogs: state.data.dialogs || {},
+      setDirty,
+      onDelete: deleteActor,
+      onOpenDialog: (id) => {
+        ensureDialogForNpc(state.data, id);
+        state.selection = defaultSelection({ view: 'dialog', dialogId: id, dialogNodeId: null, actorId: id, actorType: type, actorFilter: state.selection.actorFilter });
+        renderEditor();
+        renderSidebar();
+      },
+    }, { includeIdentity: false, hideDelete: true, title: `${actorTypeLabel(type)}-Details` });
+    viewEl.appendChild(card);
+  }
+}
+
+function actorTypeField(actor) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const label = document.createElement('label');
+  label.textContent = 'Typ';
+  const select = document.createElement('select');
+  ACTOR_TYPES.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    if (opt.value === getActorType(actor)) option.selected = true;
+    select.appendChild(option);
   });
-  viewEl.appendChild(card);
+  select.onchange = () => handleActorTypeChange(actor, select.value);
+  wrap.append(label, select);
+  return wrap;
 }
 
 function renderDialogView() {
@@ -1871,6 +2018,27 @@ function updateActor(actor, key, value) {
   setDirty(true);
 }
 
+function updateActorId(actor, value) {
+  const previous = actor.id;
+  updateActor(actor, 'id', value);
+  if (state.selection.actorId === previous) state.selection.actorId = value;
+  if (actorSupportsDialog(actor) && state.data?.dialogs && previous && previous !== value) {
+    const dialog = state.data.dialogs[previous];
+    if (dialog && !state.data.dialogs[value]) {
+      state.data.dialogs[value] = dialog;
+      delete state.data.dialogs[previous];
+    }
+  }
+}
+
+function handleActorTypeChange(actor, nextType) {
+  updateActor(actor, 'type', nextType);
+  applyActorTypeDefaults(state.data, actor);
+  state.selection = defaultSelection({ view: 'actor', actorId: actor.id, actorType: nextType, actorFilter: state.selection.actorFilter });
+  renderSidebar();
+  renderEditor();
+}
+
 function updateEnemy(enemy, key, value) {
   enemy[key] = value;
   setDirty(true);
@@ -1982,18 +2150,18 @@ function deleteObject(id) {
 
 function addActor(type) {
   ensureActorCollection(state.data);
-  const isEnemy = type === 'enemy';
-  const promptText = isEnemy ? 'Neue Gegner-ID:' : 'Name des NPCs:';
+  const targetType = type || 'npc';
+  const promptText = targetType === 'enemy' ? 'Neue Gegner-ID:' : 'Name des Actors:';
   const value = prompt(promptText);
   if (!value) return;
   const npcDraft = createNpcDraft(value);
-  const id = isEnemy ? value : (npcDraft.id || value);
-  const actor = isEnemy
+  const id = targetType === 'enemy' ? value : (npcDraft.id || value);
+  const actor = targetType === 'enemy'
     ? { id, type: 'enemy', name: value, description: '', ascii: { file: '', fontSize: 4 }, stats: { hp: 10, attack: 1, defense: 0 }, behavior: { fleeDifficulty: 0 }, drops: [], hooks: { on_attack: [], on_hit: [], on_miss: [], on_defeat: [] } }
-    : { ...npcDraft, id, type: 'npc' };
+    : { ...npcDraft, id, name: value, type: targetType };
   state.data.actors.push(actor);
-  if (!isEnemy) ensureDialogForNpc(state.data, actor.id);
-  state.selection = defaultSelection({ view: isEnemy ? 'enemy' : 'npc', actorId: actor.id, actorType: isEnemy ? 'enemy' : 'npc' });
+  applyActorTypeDefaults(state.data, actor);
+  state.selection = defaultSelection({ view: 'actor', actorId: actor.id, actorType: getActorType(actor), actorFilter: state.selection.actorFilter });
   setDirty(true);
   renderSidebar();
   renderEditor();
@@ -2308,9 +2476,9 @@ function prepareAdventureForSave(data) {
   ensureDialogState(data);
   const cloned = JSON.parse(JSON.stringify(data));
   applyExitLockingMetaToRooms(cloned);
-  normalizeEnemies(cloned, { removeLegacy: true });
+  normalizeActors(cloned, { removeLegacy: true });
   const actors = cloned.actors || [];
-  cloned.npcs = actors.filter(actor => getActorType(actor) === 'npc').map(stripActorType);
+  cloned.npcs = actors.filter(actor => ['npc', 'dialogue'].includes(getActorType(actor))).map(stripActorType);
   cloned.enemies = actors.filter(actor => getActorType(actor) === 'enemy').map(stripActorType);
   return cloned;
 }

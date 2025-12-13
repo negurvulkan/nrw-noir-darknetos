@@ -15,6 +15,7 @@ export function createNpcDraft(name = 'Neuer NPC') {
   const id = slugify(name) || 'npc';
   return {
     id,
+    type: 'npc',
     name,
     description: '',
     room: '',
@@ -49,24 +50,34 @@ function sectionTitle(text) {
   return el;
 }
 
-export function renderNpcEditor(npc, ctx) {
+export function renderNpcEditor(npc, ctx, options = {}) {
   const { rooms, dialogs, setDirty, onDelete, onOpenDialog } = ctx;
+  const { includeIdentity = true, hideDelete = false, showHeader = true, title } = options;
   const card = document.createElement('div');
   card.className = 'card';
-  card.appendChild(header(npc.id));
-  card.appendChild(fieldGrid([
-    inputField('ID', npc.id, (v) => { npc.id = slugify(v); setDirty(true); }),
-    inputField('Name', npc.name, (v) => {
-      const prevId = npc.id;
-      npc.name = v;
-      if (!npc.id || npc.id === slugify(prevId)) {
-        npc.id = slugify(v) || prevId;
-      }
-      setDirty(true);
-    }),
+  if (showHeader) card.appendChild(header(title || `NPC ${npc.id}`));
+
+  const identityFields = [];
+  if (includeIdentity) {
+    identityFields.push(
+      inputField('ID', npc.id, (v) => { npc.id = slugify(v); setDirty(true); }),
+      inputField('Name', npc.name, (v) => {
+        const prevId = npc.id;
+        npc.name = v;
+        if (!npc.id || npc.id === slugify(prevId)) {
+          npc.id = slugify(v) || prevId;
+        }
+        setDirty(true);
+      }),
+    );
+  }
+
+  identityFields.push(
     selectField('Raum', npc.room, rooms.map(r => ({ value: r.id, label: r.title || r.id })), (v) => { npc.room = v; setDirty(true); }),
     selectField('Start-Dialognode', npc.dialog_start, getDialogNodeOptions(dialogs, npc.id), (v) => { npc.dialog_start = v; setDirty(true); }),
-  ]));
+  );
+
+  card.appendChild(fieldGrid(identityFields));
 
   card.appendChild(textArea('Beschreibung', npc.description || '', (v) => { npc.description = v; setDirty(true); }));
   card.appendChild(flagFields('Nur anzeigen wenn Flag', npc.only_if_flag, (flag) => { npc.only_if_flag = normalizeFlag(flag); setDirty(true); }));
@@ -89,21 +100,24 @@ export function renderNpcEditor(npc, ctx) {
   editDialog.className = 'primary';
   editDialog.textContent = 'Dialog bearbeiten';
   editDialog.onclick = () => onOpenDialog(npc.id);
-  const del = document.createElement('button');
-  del.className = 'danger';
-  del.textContent = 'NPC löschen';
-  del.onclick = () => onDelete(npc.id);
-  actions.append(editDialog, del);
+  actions.append(editDialog);
+  if (!hideDelete) {
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'NPC löschen';
+    del.onclick = () => onDelete(npc.id);
+    actions.appendChild(del);
+  }
   card.appendChild(actions);
   return card;
 }
 
-function header(id) {
+function header(text) {
   const wrap = document.createElement('div');
   wrap.className = 'badge';
   const dot = document.createElement('span');
   dot.className = 'dot';
-  wrap.append(dot, document.createTextNode('NPC ' + id));
+  wrap.append(dot, document.createTextNode(text));
   return wrap;
 }
 
