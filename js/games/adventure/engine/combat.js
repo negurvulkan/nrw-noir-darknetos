@@ -1,10 +1,11 @@
 // Simple combat handler for adventure.
+// Refactored to work with unified 'Actor' entities.
 import { loadAscii } from './loader.js';
 import { advLog, renderStatus } from './ui.js';
 import { runEvents } from './events.js';
 
 const MIN_PLAYER_DAMAGE = 1;
-const MIN_ENEMY_DAMAGE = 0;
+const MIN_OPPONENT_DAMAGE = 0;
 const DEFAULT_FLEE_DIFFICULTY = 0.45;
 
 function normalizeIdLocal(str = '') {
@@ -46,22 +47,23 @@ function formatItemLabel(item, qty = 1) {
   return item?.stackable || qty > 1 ? `${name} x${qty}${unit}` : name;
 }
 
-function getEnemyHooks(enemy) {
-  const hooks = enemy.hooks && typeof enemy.hooks === 'object' ? enemy.hooks : {};
+function getActorHooks(actor) {
+  const hooks = actor.hooks && typeof actor.hooks === 'object' ? actor.hooks : {};
+  // Fallback: Events direkt auf der Actor-Root (Legacy-Support oder Vereinfachung)
   return {
     on_attack: Array.isArray(hooks.on_attack)
       ? hooks.on_attack
-      : (Array.isArray(enemy.on_attack) ? enemy.on_attack : []),
+      : (Array.isArray(actor.on_attack) ? actor.on_attack : []),
     on_hit: Array.isArray(hooks.on_hit) ? hooks.on_hit : [],
     on_miss: Array.isArray(hooks.on_miss) ? hooks.on_miss : [],
     on_defeat: Array.isArray(hooks.on_defeat)
       ? hooks.on_defeat
-      : (Array.isArray(enemy.on_defeat) ? enemy.on_defeat : []),
+      : (Array.isArray(actor.on_defeat) ? actor.on_defeat : []),
   };
 }
 
-async function runEnemyHook(enemy, key, state, ctx) {
-  const hooks = getEnemyHooks(enemy);
+async function runActorHook(actor, key, state, ctx) {
+  const hooks = getActorHooks(actor);
   const events = hooks[key];
   if (Array.isArray(events) && events.length) {
     await runEvents(events, state, ctx);
@@ -83,115 +85,79 @@ function ensureCombatMeta(state) {
 
 function endCombat(state) {
   state.inCombat = false;
-  state.enemy = null;
+  state.activeOpponent = null;
   state.combat = { defending: false, enemyStartHp: null, weaponDefense: 0 };
 }
 
-function getActorLabel(actor, fallback = 'Gegner') {
-  return actor?.name || actor?.id || fallback;
-}
-
-function normalizeCombatant(actor) {
-  if (!actor || typeof actor !== 'object') return actor;
-
-  const stats = actor.stats && typeof actor.stats === 'object' ? { ...actor.stats } : {};
-  if (Number.isFinite(actor.attack) && stats.attack === undefined) {
-    stats.attack = actor.attack;
-  }
-  if (Number.isFinite(actor.defense) && stats.defense === undefined) {
-    stats.defense = actor.defense;
-  }
-  if (Number.isFinite(actor.hp) && stats.hp === undefined) {
-    stats.hp = actor.hp;
-  }
-  if (Number.isFinite(actor.maxHp) && stats.maxHp === undefined) {
-    stats.maxHp = actor.maxHp;
-  }
-  if (stats.maxHp !== undefined && stats.hp === undefined) {
-    stats.hp = stats.maxHp;
-  }
-
-  const hooks = actor.hooks && typeof actor.hooks === 'object' ? { ...actor.hooks } : {};
-  if (hooks.on_attack === undefined && Array.isArray(actor.on_attack)) {
-    hooks.on_attack = actor.on_attack;
-  }
-  if (hooks.on_hit === undefined && Array.isArray(actor.on_hit)) {
-    hooks.on_hit = actor.on_hit;
-  }
-  if (hooks.on_miss === undefined && Array.isArray(actor.on_miss)) {
-    hooks.on_miss = actor.on_miss;
-  }
-  if (hooks.on_defeat === undefined && Array.isArray(actor.on_defeat)) {
-    hooks.on_defeat = actor.on_defeat;
-  }
-
-  actor.stats = stats;
-  actor.hooks = hooks;
-  return actor;
-}
-
-function describeEnemy(enemy, combatMeta) {
-  const startHp = combatMeta?.enemyStartHp ?? enemy.stats.hp;
-  const hp = Math.max(enemy.stats.hp, 0);
-  const label = getActorLabel(enemy);
-  return `${label} (${hp}/${startHp} HP, ⚔ ${enemy.stats.attack} 🛡 ${enemy.stats.defense})`;
+function describeOpponent(actor, combatMeta) {
+  // Fallback, falls stats fehlen
+  const stats = actor.stats || { hp: 10, attack: 1, defense: 0 };
+  const startHp = combatMeta?.enemyStartHp ?? stats.hp;
+  const hp = Math.max(stats.hp, 0);
+  return `${actor.name || actor.id} (${hp}/${startHp} HP, ⚔ ${stats.attack} 🛡 ${stats.defense})`;
 }
 
 export async function startCombat(actorId, state, ctx) {
+  // Lädt nun einen Actor statt explizit "Enemy"
   const actor = await ctx.loadActor(actorId);
-  const combatant = normalizeCombatant({ ...actor });
-  const combatConfig = combatant.combat || {};
-  const hasCombatStats = Number.isFinite(combatant.stats?.hp) || Number.isFinite(combatant.stats?.maxHp);
-  if (combatConfig.enabled === false || !hasCombatStats) {
-    const label = getActorLabel(combatant, 'Der Akteur');
-    const reason = combatConfig.enabled === false ? 'möchte nicht kämpfen' : 'ist nicht kampffähig';
-    advLog([`${label} ${reason}.`]);
-    return false;
+  
+  state.inCombat = true;
+  // Wir kopieren den Actor in den aktiven Combat-State, um HP-Änderungen nur temporär/lokal zu halten
+  // oder um sicherzustellen, dass wir nicht direkt im Cache schreiben, bis gespeichert wird.
+  state.activeOpponent = JSON.parse(JSON.stringify(actor));
+  
+  // Sicherstellen, dass Stats existieren
+  if (!state.activeOpponent.stats) {
+      state.activeOpponent.stats = { hp: 10, attack: 1, defense: 0 };
   }
 
-  const enemy = normalizeCombatant(combatant);
-  state.inCombat = true;
-  state.enemy = JSON.parse(JSON.stringify(enemy));
-  state.enemy.hooks = getEnemyHooks(state.enemy);
+  // Pre-calculate Hooks access
+  state.activeOpponent.hooks = getActorHooks(state.activeOpponent);
+
   if (!state.stats.maxHp) {
     state.stats.maxHp = state.stats.hp;
   }
+  
   const combatMeta = ensureCombatMeta(state);
-  combatMeta.enemyStartHp = enemy.stats?.hp ?? null;
+  combatMeta.enemyStartHp = state.activeOpponent.stats.hp;
   combatMeta.defending = false;
 
-  if (enemy.ascii) {
-    await loadAscii(enemy.ascii);
+  if (actor.ascii) {
+    await loadAscii(actor.ascii);
   }
+  
   advLog([
-    `Ein ${getActorLabel(enemy)} erscheint!`,
-    `Beschreibung: ${enemy.description}`,
-    describeEnemy(enemy, combatMeta),
-    'Verfügbare Aktionen im Kampf: attack, defend, flee, use <item>'
+    `Ein Kampf beginnt!`,
+    `${actor.name || 'Der Gegner'} greift an!`,
+    `Beschreibung: ${actor.description || 'Ein feindseliges Wesen.'}`,
+    describeOpponent(state.activeOpponent, combatMeta),
+    'Verfügbare Aktionen: attack, defend, flee, use <item>'
   ]);
+  
   renderStatus(state);
   ctx.saveState();
 }
 
 export async function handleCombatAction(action, state, ctx) {
-  if (!state.inCombat || !state.enemy) {
+  if (!state.inCombat || !state.activeOpponent) {
     return false;
   }
-  const enemy = normalizeCombatant(state.enemy);
+  
+  const opponent = state.activeOpponent;
   const combatMeta = ensureCombatMeta(state);
-  let enemyTurnRequired = true;
+  let opponentTurnRequired = true;
 
   switch (action.verb) {
     case 'attack':
-      await playerAttack(enemy, state, ctx, combatMeta);
+      await playerAttack(opponent, state, ctx, combatMeta);
       break;
     case 'defend':
       combatMeta.defending = true;
       advLog(['Du gehst in Verteidigungshaltung und bereitest dich vor.']);
       break;
     case 'flee':
-      enemyTurnRequired = false;
-      if (await attemptFlee(enemy, state, ctx)) {
+      opponentTurnRequired = false;
+      if (await attemptFlee(opponent, state, ctx)) {
         renderStatus(state);
         ctx.saveState();
         return true;
@@ -205,29 +171,35 @@ export async function handleCombatAction(action, state, ctx) {
       return true;
   }
 
-  if (!state.inCombat || !state.enemy) {
+  // Check if combat ended during player turn (e.g. by an event or item)
+  if (!state.inCombat || !state.activeOpponent) {
     renderStatus(state);
     ctx.saveState();
     return true;
   }
 
-  if (enemy.stats.hp <= 0) {
-    await handleVictory(enemy, state, ctx);
+  // Check Victory
+  if (opponent.stats.hp <= 0) {
+    await handleVictory(opponent, state, ctx);
     return true;
   }
 
-  if (enemyTurnRequired) {
-    await enemyAttack(enemy, state, ctx, combatMeta);
+  // Opponent Turn
+  if (opponentTurnRequired) {
+    await opponentAttack(opponent, state, ctx, combatMeta);
   }
 
-  if (!state.inCombat || !state.enemy) {
+  // Check if combat ended during opponent turn
+  if (!state.inCombat || !state.activeOpponent) {
     renderStatus(state);
     ctx.saveState();
     return true;
   }
 
+  // Check Defeat
   if (state.stats.hp <= 0) {
-    advLog(['Du wurdest besiegt. Der Kampf endet.']);
+    advLog(['Du wurdest besiegt.']);
+    // Hier könnte man Game Over Logik einfügen oder Reset
     endCombat(state);
   }
 
@@ -236,56 +208,63 @@ export async function handleCombatAction(action, state, ctx) {
   return true;
 }
 
-async function playerAttack(enemy, state, ctx, combatMeta, attackOverride = null, sourceLabel = null) {
-  await runEnemyHook(enemy, 'on_attack', state, ctx);
+async function playerAttack(opponent, state, ctx, combatMeta, attackOverride = null, sourceLabel = null) {
+  await runActorHook(opponent, 'on_attack', state, ctx);
 
   const attackValue = attackOverride ?? state.stats.attack ?? MIN_PLAYER_DAMAGE;
-  const rawDamage = attackValue - (enemy.stats.defense || 0);
+  const rawDamage = attackValue - (opponent.stats.defense || 0);
   const hit = rawDamage > 0;
   const playerDamage = hit ? Math.max(MIN_PLAYER_DAMAGE, rawDamage) : 0;
+  const name = opponent.name || 'der Gegner';
 
   if (!hit) {
-    advLog([`Du greifst ${getActorLabel(enemy)} an, verfehlst jedoch oder dein Schlag prallt ab.`]);
-    await runEnemyHook(enemy, 'on_miss', state, ctx);
+    advLog([`Du greifst ${name} an, verfehlst jedoch oder dein Schlag prallt ab.`]);
+    await runActorHook(opponent, 'on_miss', state, ctx);
     combatMeta.defending = false;
     return;
   }
 
-  enemy.stats.hp -= playerDamage;
+  opponent.stats.hp -= playerDamage;
   const attackLabel = sourceLabel ? `Mit ${sourceLabel} triffst du` : 'Du triffst';
   advLog([
-    `${attackLabel} ${getActorLabel(enemy)} für ${playerDamage} Schaden. (${Math.max(enemy.stats.hp, 0)} HP übrig)`
+    `${attackLabel} ${name} für ${playerDamage} Schaden. (${Math.max(opponent.stats.hp, 0)} HP übrig)`
   ]);
-  await runEnemyHook(enemy, 'on_hit', state, ctx);
+  await runActorHook(opponent, 'on_hit', state, ctx);
 
-  if (enemy.stats.hp <= 0) {
-    await handleVictory(enemy, state, ctx);
+  if (opponent.stats.hp <= 0) {
+    await handleVictory(opponent, state, ctx);
     return;
   }
 
   combatMeta.defending = false;
 }
 
-async function enemyAttack(enemy, state, ctx, combatMeta) {
+async function opponentAttack(opponent, state, ctx, combatMeta) {
+  const stats = opponent.stats || { attack: 1 };
+  const name = opponent.name || 'Der Gegner';
+  
   const baseDamage = Math.max(
-    MIN_ENEMY_DAMAGE,
-    (enemy.stats.attack || 1) - ((state.stats.defense || 0) + (combatMeta.weaponDefense || 0))
+    MIN_OPPONENT_DAMAGE,
+    (stats.attack || 1) - ((state.stats.defense || 0) + (combatMeta.weaponDefense || 0))
   );
-  const enemyDamage = combatMeta.defending ? Math.max(0, Math.floor(baseDamage / 2)) : baseDamage;
-  state.stats.hp -= enemyDamage;
+  
+  const actualDamage = combatMeta.defending ? Math.max(0, Math.floor(baseDamage / 2)) : baseDamage;
+  state.stats.hp -= actualDamage;
 
   const defenseNote = combatMeta.defending ? ' (abgewehrt)' : '';
   advLog([
-    `${getActorLabel(enemy)} greift an und verursacht ${enemyDamage} Schaden${defenseNote}. (${Math.max(state.stats.hp, 0)} HP übrig)`
+    `${name} greift an und verursacht ${actualDamage} Schaden${defenseNote}. (${Math.max(state.stats.hp, 0)} HP übrig)`
   ]);
 
   combatMeta.defending = false;
   combatMeta.weaponDefense = 0;
 }
 
-async function handleVictory(enemy, state, ctx) {
-  advLog([`${getActorLabel(enemy)} wurde besiegt!`]);
-  const drops = enemy.drops || [];
+async function handleVictory(opponent, state, ctx) {
+  const name = opponent.name || 'Der Gegner';
+  advLog([`${name} wurde besiegt!`]);
+  
+  const drops = opponent.drops || [];
   for (const drop of drops) {
     if (!drop) continue;
     try {
@@ -302,20 +281,27 @@ async function handleVictory(enemy, state, ctx) {
     }
   }
 
-  await runEnemyHook(enemy, 'on_defeat', state, ctx);
+  await runActorHook(opponent, 'on_defeat', state, ctx);
+
+  // Wenn der Actor besiegt ist, setzen wir seine HP im Global State auch auf 0,
+  // damit er nicht sofort respawnt oder wieder sichtbar ist (siehe actorVisible in core.js)
+  if (state.actors && state.actors[opponent.id]) {
+      state.actors[opponent.id].hp = 0;
+      state.actors[opponent.id].hostile = false; // Kampf vorbei
+  }
 
   endCombat(state);
   renderStatus(state);
   ctx.saveState();
 }
 
-async function attemptFlee(enemy, state, ctx) {
-  const difficulty = enemy.behavior?.fleeDifficulty ?? DEFAULT_FLEE_DIFFICULTY;
+async function attemptFlee(opponent, state, ctx) {
+  const difficulty = opponent.behavior?.fleeDifficulty ?? DEFAULT_FLEE_DIFFICULTY;
   const successChance = Math.max(0.05, Math.min(0.95, 0.8 - difficulty));
   const escaped = Math.random() < successChance;
 
   if (escaped) {
-    advLog([`Du entkommst ${getActorLabel(enemy)} und ziehst dich zurück.`]);
+    advLog([`Du entkommst ${opponent.name || 'dem Gegner'} und ziehst dich zurück.`]);
     endCombat(state);
     renderStatus(state);
     ctx.saveState();
@@ -323,7 +309,7 @@ async function attemptFlee(enemy, state, ctx) {
   }
 
   advLog(['Die Flucht scheitert – der Gegner greift erneut an!']);
-  await enemyAttack(enemy, state, ctx, ensureCombatMeta(state));
+  await opponentAttack(opponent, state, ctx, ensureCombatMeta(state));
   return false;
 }
 
@@ -344,31 +330,40 @@ async function handleCombatItemUse(action, state, ctx) {
     return;
   }
   const item = await ctx.loadItem(match);
+  
+  // Prüfen ob Waffe
   const weapon = item.weapon || item.combat_weapon || item.combatWeapon;
   const weaponAttack = Number.isFinite(weapon?.attack) ? weapon.attack : null;
   const weaponDefense = Number.isFinite(weapon?.defense) ? weapon.defense : null;
   const weaponConsume = weapon?.consume === true;
   const hasWeaponStats = (weaponAttack ?? 0) !== 0 || (weaponDefense ?? 0) !== 0;
+  
+  // Prüfen ob Effekt (Heilung etc.)
   const effect = item.combat_effects || item.combatEffects;
+  
   if (!effect && !hasWeaponStats) {
     advLog(['Dieses Item hat keinen Effekt im Kampf.']);
     return;
   }
 
-  const enemy = state.enemy;
+  const opponent = state.activeOpponent;
   const combatMeta = ensureCombatMeta(state);
 
+  // 1. Als Waffe nutzen
   if (hasWeaponStats) {
     const attackValue = Number.isFinite(weaponAttack) && weaponAttack !== 0
       ? weaponAttack
       : state.stats.attack;
-    await playerAttack(enemy, state, ctx, combatMeta, attackValue, item.name || item.id);
+      
+    await playerAttack(opponent, state, ctx, combatMeta, attackValue, item.name || item.id);
+    
     if (weaponDefense) {
       combatMeta.weaponDefense = weaponDefense;
       advLog([`Du setzt ${item.name || item.id} defensiv ein und erhöhst deine Verteidigung um ${weaponDefense}.`]);
     }
   }
 
+  // 2. Buffs / Heilung
   if (typeof effect?.heal === 'number') {
     const maxHp = state.stats.maxHp || state.stats.hp;
     state.stats.hp = Math.min(maxHp, state.stats.hp + effect.heal);
@@ -383,6 +378,7 @@ async function handleCombatItemUse(action, state, ctx) {
     advLog([`Dein Angriffswert steigt um ${effect.buff.attack}.`]);
   }
 
+  // Konsumieren
   const consume = effect ? effect.consume !== false : weaponConsume;
   if (consume) {
     const removed = ctx?.removeFromInventory ? ctx.removeFromInventory(item.id, 1) : 0;

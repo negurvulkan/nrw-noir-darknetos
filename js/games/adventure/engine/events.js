@@ -9,14 +9,6 @@ function normalizeQty(qty) {
   return Number.isFinite(val) && val > 0 ? val : 1;
 }
 
-function resolveActorId(event) {
-  return event.actorId || event.enemy || event.npc || event.id;
-}
-
-function resolveTargetRoom(event, state) {
-  return event.room || event.to || state.location;
-}
-
 function formatItemLabel(item, qty = 1) {
   const name = item?.name || item?.id || 'Item';
   const unit = item?.unit ? ` ${item.unit}` : '';
@@ -136,14 +128,23 @@ async function handleEvent(event, state, ctx) {
       ctx.saveState();
       await ctx.showCurrentRoom(true);
       break;
-    case 'trigger_fight':
-      await ctx.startCombat(resolveActorId(event));
+    
+    // Unified Combat Trigger
+    case 'trigger_fight': {
+      const targetId = event.actor || event.enemy || event.id;
+      if (targetId) {
+        await ctx.startCombat(targetId);
+      }
       break;
+    }
+
+    // Unified Spawn Items
     case 'spawn_item': {
       const qty = normalizeQty(event.qty);
       if (ctx?.spawnItem) {
         ctx.spawnItem(event.room || state.location, event.id, qty);
       } else {
+        // Fallback Direct State Mutation (updated structure)
         state.roomSpawns = state.roomSpawns || {};
         const roomId = event.room || state.location;
         state.roomSpawns[roomId] = state.roomSpawns[roomId] || { items: [], actors: [] };
@@ -152,59 +153,54 @@ async function handleEvent(event, state, ctx) {
       ctx?.saveState?.();
       break;
     }
+
+    // Unified Spawn Actors (replaces spawn_enemy and spawn_npc)
     case 'spawn_actor':
-    case 'spawn_enemy':
-    case 'spawn_npc': {
-      const actorId = resolveActorId(event);
-      const roomId = resolveTargetRoom(event, state);
-      const qty = normalizeQty(event.qty);
+    case 'spawn_enemy': // Alias for backward compatibility
+    case 'spawn_npc':   // Alias for backward compatibility
+    {
+      const actorId = event.id || event.actor || event.npc || event.enemy;
       if (ctx?.spawnActor) {
-        await ctx.spawnActor(roomId, actorId, qty);
-      } else if (ctx?.spawnEnemy) {
-        await ctx.spawnEnemy(roomId, actorId, qty);
-      } else if (ctx?.spawnNpc) {
-        await ctx.spawnNpc(roomId, actorId);
+        ctx.spawnActor(event.room || state.location, actorId);
       } else {
+        // Fallback Direct State Mutation
         state.actors = state.actors || {};
-        state.actorFlags = state.actorFlags || {};
-        state.npcs = state.actors;
-        state.npcFlags = state.actorFlags;
-        state.actors[actorId] = { room: roomId, flags: {}, counters: {} };
-        state.actorFlags[actorId] = state.actors[actorId].flags;
+        const existing = state.actors[actorId] || { flags: {}, counters: {}, hostile: false };
+        existing.room = event.room || state.location;
+        state.actors[actorId] = existing;
       }
       ctx?.saveState?.();
       break;
     }
-    case 'move_actor':
-    case 'npc_move': {
-      const actorId = resolveActorId(event);
-      const destination = resolveTargetRoom(event, state);
+
+    // Unified Actor Movement
+    case 'actor_move':
+    case 'npc_move': // Alias
+    {
+      const actorId = event.id || event.actor || event.npc;
       if (ctx?.moveActor) {
-        ctx.moveActor(actorId, destination);
-      } else if (ctx?.moveNpc) {
-        ctx.moveNpc(actorId, destination);
+        ctx.moveActor(actorId, event.to);
       }
       ctx?.saveState?.();
       break;
     }
-    case 'npc_move_if_present': {
-      const actorId = resolveActorId(event);
-      const inRoom = ctx?.actorIsInRoom
-        ? ctx.actorIsInRoom(actorId, event.from)
-        : ctx?.npcIsInRoom?.(actorId, event.from) || false;
-      if (inRoom) {
-        if (ctx?.moveActor) {
-          ctx.moveActor(actorId, resolveTargetRoom(event, state));
-        } else if (ctx?.moveNpc) {
-          ctx.moveNpc(actorId, resolveTargetRoom(event, state));
-        }
+
+    case 'actor_move_if_present':
+    case 'npc_move_if_present': // Alias
+    {
+      const actorId = event.id || event.actor || event.npc;
+      const inRoom = ctx?.actorIsInRoom ? ctx.actorIsInRoom(actorId, event.from) : false;
+      if (inRoom && ctx?.moveActor) {
+        ctx.moveActor(actorId, event.to);
         ctx?.saveState?.();
       }
       break;
     }
+
     case 'start_dialog':
       if (ctx.startDialog) {
-        await ctx.startDialog(resolveActorId(event), event.node);
+        const actorId = event.actor || event.npc || event.id;
+        await ctx.startDialog(actorId, event.node);
       } else {
         advLog(['Dialog kann nicht gestartet werden.']);
       }

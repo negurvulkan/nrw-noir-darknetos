@@ -72,23 +72,8 @@ function defaultSelection(overrides = {}) {
   };
 }
 
-function migrateLegacyActors(data) {
-  ensureActorCollection(data);
-  const existingIds = new Set(data.actors.map(actor => actor.id));
-  (data.enemies || []).forEach(enemy => {
-    if (!existingIds.has(enemy.id)) {
-      data.actors.push({ ...enemy, type: 'enemy' });
-    }
-  });
-  (data.npcs || []).forEach(npc => {
-    if (!existingIds.has(npc.id)) {
-      data.actors.push({ ...npc, type: 'npc' });
-    }
-  });
-  return data.actors;
-}
-
 function normalizeActor(actor, options = {}) {
+  // Fallback, falls 'type' fehlt
   if (!actor.type) {
     actor.type = (actor.behavior || actor.stats) ? 'enemy' : 'npc';
   }
@@ -100,18 +85,27 @@ function normalizeActor(actor, options = {}) {
 }
 
 function normalizeActors(data, options = {}) {
-  migrateLegacyActors(data);
+  ensureActorCollection(data);
+  // Falls alte Datenstrukturen existieren, migrieren wir sie hier einmalig im Speicher
+  if (Array.isArray(data.enemies) && data.enemies.length) {
+    data.enemies.forEach(e => {
+        if (!data.actors.find(a => a.id === e.id)) data.actors.push({...e, type: 'enemy'});
+    });
+    data.enemies = []; // Cleanup
+  }
+  if (Array.isArray(data.npcs) && data.npcs.length) {
+    data.npcs.forEach(n => {
+        if (!data.actors.find(a => a.id === n.id)) data.actors.push({...n, type: 'npc'});
+    });
+    data.npcs = []; // Cleanup
+  }
+  
   data.actors = data.actors.map(actor => normalizeActor(actor, options));
   return data.actors;
 }
 
 function actorsByType(type) {
   return (state.data?.actors || []).filter(actor => actor.type === type);
-}
-
-function findActor(type, id) {
-  if (!id) return null;
-  return actorsByType(type).find(actor => actor.id === id) || null;
 }
 
 function findActorById(id) {
@@ -316,7 +310,7 @@ function buildAiPayload(mode, options) {
   const entityType = options.entityType || (mode === 'entity' ? currentEntityType() : undefined);
   const payload = {
     mode,
-    entityType,
+    entityType: (entityType === 'npc' || entityType === 'enemy') ? 'actor' : entityType, // Map to backend 'actor'
     style: 'nrw-noir-darknet',
     seed: options.seed || '',
     context: {
@@ -334,8 +328,8 @@ function buildAiPayload(mode, options) {
 }
 
 function existingIdsFor(entityType) {
-  if (entityType === 'npc' || entityType === 'enemy') {
-    return actorsByType(entityType).map(actor => actor.id).filter(Boolean);
+  if (entityType === 'npc' || entityType === 'enemy' || entityType === 'actor') {
+    return (state.data?.actors || []).map(actor => actor.id).filter(Boolean);
   }
   const map = { room: 'rooms', item: 'items', object: 'objects' };
   const key = map[entityType];
@@ -603,8 +597,6 @@ async function openAdventure(id) {
     state.data = res.data || res;
     ensureActorCollection(state.data);
     normalizeActors(state.data);
-    state.data.enemies = [];
-    state.data.npcs = [];
     ensureDialogState(state.data);
     state.asciiFiles = res.ascii || res.asciiFiles || [];
     state.selection = defaultSelection();
@@ -688,8 +680,8 @@ function renderSidebar() {
       renderEditor();
       renderSidebar();
     },
-    onAddNpc: () => addActor('npc'),
-    onAddEnemy: () => addActor('enemy'),
+    // Hier ist die Änderung: Nur noch ein Callback
+    onAddActor: () => addActor('npc'), // Default type 'npc', user can change in editor
   });
 }
 
@@ -1394,8 +1386,9 @@ function buildEventBlockOptions() {
   return {
     rooms: existingIdsFor('room'),
     items: existingIdsFor('item'),
-    enemies: existingIdsFor('enemy'),
-    npcs: existingIdsFor('npc'),
+    // WICHTIG: Hier müssen wir die echten Objekte übergeben, nicht nur IDs!
+    // existingIdsFor('actor') gibt nur Strings zurück, das verursacht den Crash.
+    actors: state.data?.actors || [], 
   };
 }
 
@@ -1907,12 +1900,11 @@ function deleteObject(id) {
   renderEditor();
 }
 
-function addActor(type) {
+function addActor(defaultType = 'npc') {
   ensureActorCollection(state.data);
-  const label = type === 'enemy' ? 'Gegner' : 'NPC';
-  const name = prompt(`${label}-Name oder ID:`);
+  const name = prompt(`Name des neuen Akteurs:`);
   if (!name) return;
-  const actor = createActorDraft(type, name);
+  const actor = createActorDraft(name, defaultType);
   state.data.actors.push(actor);
   if (actor.type === 'npc') ensureDialogForNpc(state.data, actor.id);
   state.selection = defaultSelection({ view: 'actor', actorId: actor.id, actorType: actor.type });
@@ -2229,7 +2221,7 @@ function prepareAdventureForSave(data) {
   const cloned = JSON.parse(JSON.stringify(data));
   applyExitLockingMetaToRooms(cloned);
   normalizeActors(cloned, { removeLegacy: true });
-  cloned.enemies = [];
+  cloned.enemies = []; // Cleanup, da alles in actors liegt
   cloned.npcs = [];
   return cloned;
 }
@@ -2244,7 +2236,7 @@ async function saveCurrent() {
       rooms: prepared.rooms,
       items: prepared.items,
       objects: prepared.objects,
-      actors: prepared.actors,
+      actors: prepared.actors, // Unified Actors
       dialogs: prepared.dialogs,
     });
     toast('Adventure gespeichert', 'success');

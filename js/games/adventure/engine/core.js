@@ -1,6 +1,6 @@
 // Core adventure engine logic.
 import { parseInput } from './parser.js';
-import { loadJson, loadAscii, loadActorJson } from './loader.js';
+import { loadJson, loadAscii } from './loader.js';
 import { runEvents } from './events.js';
 import { startCombat, handleCombatAction } from './combat.js';
 import { ADVENTURE_INDEX, getCurrentAdventure, getDataRoot, setCurrentAdventure } from './config.js';
@@ -21,49 +21,45 @@ const DEBUG_LOG_LIMIT = 200;
 let debugLogging = false;
 const debugLogEntries = [];
 
-let injectedAdventureIndex = null;
 let recipeIndex = [];
 let recipeKeyIndex = new Map();
+
+// --- Cache & State Management ---
 
 const createEmptyCache = () => ({
   world: null,
   rooms: {},
   items: {},
   objects: {},
-  actors: {},
+  actors: {}, // Zusammengeführt aus npcs/enemies
   dialogs: {},
   itemIds: [],
-  actorIds: [],
-  actorIndexLoaded: false,
   recipeIndexBuilt: false
 });
 
-const createEmptyState = () => {
-  const baseState = {
-    location: null,
-    inventory: [],
-    flags: {},
-    counters: {},
-    stats: { ...defaultStats },
-    inCombat: false,
-    enemy: null,
-    combat: { defending: false, enemyStartHp: null },
-    visited: {},
-    lockedExits: {},
-    roomSpawns: {},
-    actorFlags: {},
-    actors: {},
-    dialog: { active: false, actorId: null, npcId: null, nodeId: null }
-  };
-  baseState.npcFlags = baseState.actorFlags;
-  baseState.npcs = baseState.actors;
-  return baseState;
-};
+const createEmptyState = () => ({
+  location: null,
+  inventory: [],
+  flags: {},
+  counters: {},
+  stats: { ...defaultStats },
+  inCombat: false,
+  activeOpponent: null, // War vorher 'enemy', jetzt Referenz auf den Actor
+  combat: { defending: false, enemyStartHp: null },
+  visited: {},
+  lockedExits: {},
+  roomSpawns: {},
+  actorFlags: {}, // Zusammengeführt
+  actors: {}, // Laufzeit-Status aller Actors (HP, Position, Hostility)
+  dialog: { active: false, actorId: null, nodeId: null }
+});
 
 let cache = createEmptyCache();
 let state = createEmptyState();
 let adventureActive = false;
 let activeAdventureId = null;
+
+// --- Debugging Helpers ---
 
 function formatTimestamp() {
   return new Date().toISOString();
@@ -142,6 +138,8 @@ function printDebugLog(limit = 20) {
   }
 }
 
+// --- Lifecycle & Save/Load ---
+
 function isActive() {
   return adventureActive;
 }
@@ -161,6 +159,66 @@ function getSaveKey() {
 function clone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
+
+function saveState() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(
+    getSaveKey(),
+    JSON.stringify({
+      location: state.location,
+      inventory: state.inventory,
+      flags: state.flags,
+      counters: state.counters,
+      stats: state.stats,
+      inCombat: state.inCombat,
+      activeOpponent: state.activeOpponent,
+      combat: state.combat,
+      visited: state.visited,
+      lockedExits: state.lockedExits,
+      roomSpawns: state.roomSpawns,
+      actorFlags: state.actorFlags,
+      actors: state.actors,
+      dialog: state.dialog
+    })
+  );
+}
+
+function loadStateFromSave() {
+  if (typeof localStorage === 'undefined') return false;
+  const raw = localStorage.getItem(getSaveKey());
+  if (!raw) return false;
+  try {
+    const saved = JSON.parse(raw);
+    state = createEmptyState();
+    Object.assign(state, saved);
+    state.inventory = migrateInventory(state.inventory);
+    
+    // Fallback Initialisierungen für ältere Saves
+    if (!state.stats) state.stats = { ...defaultStats };
+    if (!state.stats.maxHp) state.stats.maxHp = defaultStats.maxHp;
+    if (!state.dialog) state.dialog = { active: false, actorId: null, nodeId: null };
+    if (!state.combat) state.combat = { defending: false, enemyStartHp: null };
+    if (!state.actorFlags) state.actorFlags = {};
+    if (!state.counters) state.counters = {};
+    if (!state.roomSpawns) state.roomSpawns = {};
+    if (!state.actors) state.actors = {};
+    
+    // Migration: Falls alte Saves noch "npcs" oder "enemies" haben, ignorieren wir sie weitgehend
+    // oder müssten sie migrieren. Hier gehen wir von einem Clean-Cut aus.
+    
+    return true;
+  } catch (err) {
+    console.error('Savegame fehlerhaft:', err);
+    return false;
+  }
+}
+
+function clearSave() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(getSaveKey());
+}
+
+// --- Inventory Management ---
 
 function normalizeInventoryEntry(entry) {
   if (!entry) return null;
@@ -249,23 +307,13 @@ function hasInventoryItem(id) {
   return getInvQty(id) > 0;
 }
 
+// --- Counters & Spawns ---
+
 function ensureCounterState() {
   if (!state.counters || typeof state.counters !== 'object') {
     state.counters = {};
   }
   return state.counters;
-}
-
-function ensureActorContainers() {
-  if (!state.actorFlags || typeof state.actorFlags !== 'object') {
-    state.actorFlags = state.npcFlags && typeof state.npcFlags === 'object' ? state.npcFlags : {};
-  }
-  if (!state.actors || typeof state.actors !== 'object') {
-    state.actors = state.npcs && typeof state.npcs === 'object' ? state.npcs : {};
-  }
-  state.npcFlags = state.actorFlags;
-  state.npcs = state.actors;
-  return { flags: state.actorFlags, actors: state.actors };
 }
 
 function getCounter(key) {
@@ -296,37 +344,7 @@ function ensureRoomSpawn(roomId) {
   if (!state.roomSpawns[key]) {
     state.roomSpawns[key] = { items: [], actors: [] };
   }
-  const spawn = state.roomSpawns[key];
-  if (!spawn.actors) {
-    spawn.actors = [];
-  }
-
-  // Legacy migrations
-  if (Array.isArray(spawn.npcs) && spawn.npcs.length) {
-    spawn.npcs.forEach((npcId) => {
-      if (!spawn.actors.some((act) => normalizeId(act.id) === normalizeId(npcId))) {
-        spawn.actors.push({ id: npcId, qty: 1, type: 'npc' });
-      }
-    });
-    delete spawn.npcs;
-  }
-  if (Array.isArray(spawn.enemies) && spawn.enemies.length) {
-    spawn.enemies.forEach((entry) => {
-      const normalized = normalizeId(entry.id || entry);
-      const qty = Number.isFinite(entry.qty) && entry.qty > 0 ? entry.qty : 1;
-      if (!normalized) return;
-      const existing = spawn.actors.find((act) => normalizeId(act.id) === normalized);
-      if (existing) {
-        existing.qty = (existing.qty || 0) + qty;
-        existing.type = existing.type || 'enemy';
-      } else {
-        spawn.actors.push({ id: entry.id || entry, qty, type: 'enemy' });
-      }
-    });
-    delete spawn.enemies;
-  }
-
-  return spawn;
+  return state.roomSpawns[key];
 }
 
 function addSpawnedItem(roomId, itemId, qty = 1) {
@@ -360,39 +378,44 @@ function consumeSpawnedItem(roomId, itemId, qty = 1) {
   return spawn.items;
 }
 
-async function addSpawnedActor(roomId, actorId, qty = 1) {
-  const normalizedRoom = normalizeId(roomId);
-  if (!actorId || !normalizedRoom) return ensureRoomSpawn(roomId).actors;
-  const actor = await loadActor(actorId);
-  const { actors } = ensureActorContainers();
-  const actorState = ensureActorState(actor.id, normalizedRoom);
-  actorState.room = normalizedRoom;
+// --- Actor Logic (Unified NPC/Enemy) ---
 
-  const spawn = ensureRoomSpawn(roomId);
-  const normalizedId = normalizeId(actor.id);
-  const amount = Number.isFinite(qty) && qty > 0 ? qty : 1;
-  const isEnemyType = actor.type === 'enemy' || !!actor.stats;
-
-  if (isEnemyType) {
-    const entry = spawn.actors.find((en) => normalizeId(en.id) === normalizedId);
-    if (entry) {
-      entry.qty = (entry.qty || 0) + amount;
-      entry.type = entry.type || actor.type || 'enemy';
-    } else {
-      spawn.actors.push({ id: actor.id, qty: amount, type: actor.type || 'enemy' });
-    }
-  } else if (!spawn.actors.some((candidate) => normalizeId(candidate.id) === normalizedId)) {
-    spawn.actors.push({ id: actor.id, qty: 1, type: actor.type || 'npc' });
+function ensureActorState(actorId, defaultRoom = null) {
+  if (!state.actors || typeof state.actors !== 'object') state.actors = {};
+  if (!state.actorFlags || typeof state.actorFlags !== 'object') state.actorFlags = {};
+  
+  if (!state.actors[actorId]) {
+    state.actors[actorId] = { 
+        room: defaultRoom ? normalizeId(defaultRoom) : null, 
+        hp: null, // Wird beim Laden gesetzt
+        flags: {}, 
+        counters: {},
+        hostile: false // Standard
+    };
   }
+  
+  // Sync global actor flags (shared state approach)
+  if (!state.actors[actorId].flags) state.actors[actorId].flags = {};
+  if (!state.actorFlags[actorId]) {
+    state.actorFlags[actorId] = state.actors[actorId].flags;
+  } else {
+    state.actors[actorId].flags = state.actorFlags[actorId];
+  }
+  
+  return state.actors[actorId];
+}
 
-  actors[actor.id] = actorState;
-  return spawn.actors;
+function addSpawnedActor(roomId, actorId) {
+    const normalizedRoom = normalizeId(roomId);
+    if (!actorId || !normalizedRoom) return;
+    ensureActorState(actorId, normalizedRoom);
+    state.actors[actorId].room = normalizedRoom;
 }
 
 function moveActorToRoom(actorId, roomId) {
   if (!actorId || !roomId) return;
-  const actorState = ensureActorState(actorId, roomId);
-  actorState.room = normalizeId(roomId);
+  ensureActorState(actorId, roomId);
+  state.actors[actorId].room = normalizeId(roomId);
 }
 
 function actorIsInRoom(actorId, roomId) {
@@ -400,6 +423,84 @@ function actorIsInRoom(actorId, roomId) {
   const actorState = ensureActorState(actorId);
   return normalizeId(actorState.room) === normalizeId(roomId);
 }
+
+async function loadActor(id) {
+  if (!cache.actors[id]) {
+    // Versucht Actor aus 'actors/id.json' zu laden
+    cache.actors[id] = await loadJson(`actors/${id}.json`);
+    
+    // Initial Flags syncen
+    if (cache.actors[id].flags && !state.actorFlags[id]) {
+      state.actorFlags[id] = { ...cache.actors[id].flags };
+    }
+  }
+  
+  const actorDef = cache.actors[id];
+  const actorState = ensureActorState(id, actorDef.room);
+
+  // Stats initialisieren falls noch nicht geschehen
+  if (actorState.hp === null && actorDef.stats) {
+      actorState.hp = actorDef.stats.hp || 10;
+  }
+  
+  // Hostility initialisieren
+  if (actorState.hostile === undefined && actorDef.behavior) {
+      actorState.hostile = actorDef.behavior.hostile || false;
+  }
+
+  if (actorDef.flags && Object.keys(actorDef.flags).length && !Object.keys(actorState.flags).length) {
+    actorState.flags = { ...actorDef.flags };
+    state.actorFlags[id] = actorState.flags;
+  }
+  
+  return { ...actorDef, ...actorState }; // Merge Definition mit Runtime State
+}
+
+function actorVisible(actor) {
+  if (!actor) return false;
+  if (actor.hidden_if_flag && flagMatches(actor.hidden_if_flag)) return false;
+  if (actor.only_if_flag && !flagMatches(actor.only_if_flag)) return false;
+  // Tote Actors sind meist nicht sichtbar (außer als Leiche, aber das ist Logik-Sache)
+  if (actor.stats && actor.hp !== null && actor.hp <= 0) return false; 
+  return true;
+}
+
+async function listActorsInRoom(roomId) {
+  const room = await loadRoom(roomId);
+  const normalizedRoom = normalizeId(roomId);
+  const actorIds = new Set(room.actors || []); // Statische Actors im Raum
+
+  // Dynamische/Gesparte Actors prüfen
+  Object.entries(state.actors || {}).forEach(([actorId, meta]) => {
+    if (meta.room && normalizeId(meta.room) === normalizedRoom) {
+      actorIds.add(actorId);
+    }
+  });
+
+  // Global geladene Actors prüfen
+  Object.values(cache.actors).forEach((actor) => {
+    const actorState = ensureActorState(actor.id, actor.room);
+    const currentRoom = actorState.room || actor.room;
+    if (currentRoom && normalizeId(currentRoom) === normalizedRoom) {
+      actorIds.add(actor.id);
+    }
+  });
+
+  const visible = [];
+  for (const actorId of actorIds) {
+    try {
+        const actor = await loadActor(actorId);
+        if (actorVisible(actor)) {
+            visible.push(actor);
+        }
+    } catch (e) {
+        console.warn(`Actor ${actorId} konnte nicht geladen werden`, e);
+    }
+  }
+  return visible;
+}
+
+// --- Data Loading (General) ---
 
 async function loadRoom(id) {
   if (!cache.rooms[id]) {
@@ -429,81 +530,6 @@ async function loadObject(id) {
   return cache.objects[id];
 }
 
-async function loadActor(id) {
-  if (!id) return null;
-  if (!cache.actorIndexLoaded) {
-    await loadActorIndex();
-  }
-  if (!cache.actors[id]) {
-    cache.actors[id] = await loadActorJson(id);
-  }
-  const actorId = cache.actors[id].id || id;
-  const hasStats = cache.actors[id].stats && Object.keys(cache.actors[id].stats).length;
-  cache.actors[id].id = actorId;
-  cache.actors[id].type = cache.actors[id].type || (hasStats ? 'enemy' : 'npc');
-  if (!cache.actors[id].stats && cache.actors[id].type === 'enemy') {
-    cache.actors[id].stats = { ...defaultStats };
-  }
-  const combat = cache.actors[id].combat || {};
-  if (combat.enabled === undefined) {
-    combat.enabled = cache.actors[id].type === 'enemy' && !!cache.actors[id].stats;
-  }
-  cache.actors[id].combat = combat;
-
-  cache.actorIds = cache.actorIds || [];
-  if (!cache.actorIds.includes(actorId)) {
-    cache.actorIds.push(actorId);
-  }
-
-  const actorState = ensureActorState(actorId, cache.actors[id]?.room);
-  if (cache.actors[id].flags && Object.keys(cache.actors[id].flags).length && !Object.keys(actorState.flags).length) {
-    actorState.flags = { ...cache.actors[id].flags };
-    state.actorFlags[actorId] = actorState.flags;
-  }
-  if (cache.actors[id].counters && !actorState.counters) {
-    actorState.counters = { ...cache.actors[id].counters };
-  }
-  return cache.actors[id];
-}
-
-async function loadNpc(id) {
-  const actor = await loadActor(id);
-  if (actor && actor.type !== 'npc') {
-    actor.type = actor.type || 'npc';
-  }
-  return actor;
-}
-
-async function loadEnemy(id) {
-  const actor = await loadActor(id);
-  if (actor && actor.type !== 'enemy') {
-    actor.type = actor.type || 'enemy';
-  }
-  return actor;
-}
-
-function ensureActorState(actorId, defaultRoom = null) {
-  const { actors, flags } = ensureActorContainers();
-  if (!actors[actorId] && state.npcs && state.npcs[actorId]) {
-    actors[actorId] = { ...state.npcs[actorId] };
-  }
-  if (!actors[actorId]) {
-    actors[actorId] = { room: defaultRoom ? normalizeId(defaultRoom) : null, flags: {}, counters: {} };
-  }
-  if (!actors[actorId].flags) {
-    actors[actorId].flags = {};
-  }
-  if (!actors[actorId].counters) {
-    actors[actorId].counters = {};
-  }
-  if (!flags[actorId]) {
-    flags[actorId] = actors[actorId].flags;
-  } else {
-    actors[actorId].flags = flags[actorId];
-  }
-  return actors[actorId];
-}
-
 async function loadDialog(actorId) {
   if (!cache.dialogs[actorId]) {
     cache.dialogs[actorId] = await loadJson(`dialogs/${actorId}.json`);
@@ -512,9 +538,7 @@ async function loadDialog(actorId) {
 }
 
 async function loadItemIndex() {
-  if (cache.itemIds && cache.itemIds.length) {
-    return cache.itemIds;
-  }
+  if (cache.itemIds && cache.itemIds.length) return cache.itemIds;
   try {
     const index = await loadJson('items/index.json');
     if (Array.isArray(index)) {
@@ -528,24 +552,7 @@ async function loadItemIndex() {
   return cache.itemIds;
 }
 
-async function loadActorIndex() {
-  if (cache.actorIds && cache.actorIds.length) {
-    return cache.actorIds;
-  }
-  cache.actorIndexLoaded = true;
-  try {
-    const index = await loadJson('actors/index.json');
-    if (Array.isArray(index)) {
-      cache.actorIds = index;
-      return cache.actorIds;
-    }
-  } catch (err) {
-    console.warn('Akteur-Index konnte nicht geladen werden:', err);
-  }
-
-  cache.actorIds = cache.actorIds || [];
-  return cache.actorIds;
-}
+// --- Crafting System ---
 
 function registerRecipeFromItem(item) {
   if (!item || !item.recipe || !Array.isArray(item.recipe.inputs)) return;
@@ -585,232 +592,6 @@ async function ensureRecipeIndexBuilt() {
   cache.recipeIndexBuilt = true;
 }
 
-function actorVisible(actor) {
-  if (!actor) return false;
-  if (actor.hidden_if_flag && flagMatches(actor.hidden_if_flag)) return false;
-  if (actor.only_if_flag && !flagMatches(actor.only_if_flag)) return false;
-  return true;
-}
-
-async function listActorsInRoom(roomId) {
-  const room = await loadRoom(roomId);
-  const normalizedRoom = normalizeId(roomId);
-  const entries = new Map();
-  const ensureQty = (id, qty = 1) => {
-    const normalized = normalizeId(id);
-    if (!normalized) return;
-    const existing = entries.get(normalized) || { id, qty: 0 };
-    existing.id = id;
-    existing.qty = Math.max(existing.qty || 0, qty || 1);
-    entries.set(normalized, existing);
-  };
-  const addQty = (id, qty = 1) => {
-    const normalized = normalizeId(id);
-    if (!normalized) return;
-    const normalizedQty = Number.isFinite(qty) && qty > 0 ? qty : 0;
-    if (!normalizedQty) return;
-    const existing = entries.get(normalized) || { id, qty: 0 };
-    existing.id = id;
-    existing.qty = (existing.qty || 0) + normalizedQty;
-    entries.set(normalized, existing);
-  };
-
-  (room.actors || []).forEach((id) => ensureQty(id));
-  (room.npcs || []).forEach((id) => ensureQty(id));
-  (room.enemies || []).forEach((id) => ensureQty(id));
-
-  const spawns = ensureRoomSpawn(roomId);
-  (spawns.actors || []).forEach((spawn) => addQty(spawn.id, spawn.qty));
-
-  Object.entries(state.actors || {}).forEach(([actorId, meta]) => {
-    if (meta.room && normalizeId(meta.room) === normalizedRoom) {
-      ensureQty(actorId);
-    }
-  });
-
-  Object.values(cache.actors).forEach((actor) => {
-    const actorState = ensureActorState(actor.id, actor.room);
-    const currentRoom = actorState.room || actor.room;
-    if (currentRoom && normalizeId(currentRoom) === normalizedRoom) {
-      ensureQty(actor.id);
-    }
-  });
-
-  const visible = [];
-  for (const entry of entries.values()) {
-    // eslint-disable-next-line no-await-in-loop
-    const actor = await loadActor(entry.id);
-    if (actorVisible(actor)) {
-      visible.push({ actor, qty: entry.qty || 1 });
-    }
-  }
-  return visible;
-}
-
-function resetAdventureData(id) {
-  cache = createEmptyCache();
-  state = createEmptyState();
-  resetRecipeData();
-  activeAdventureId = id;
-  adventureActive = false;
-}
-
-async function loadAdventureIndex() {
-  // 1) Wenn von außen gesetzt: direkt nutzen
-  if (Array.isArray(injectedAdventureIndex) && injectedAdventureIndex.length) {
-    return injectedAdventureIndex;
-  }
-
-  // 2) Fallback: klassisch via fetch(ADVENTURE_INDEX)
-  const res = await fetch(ADVENTURE_INDEX);
-  if (!res.ok) {
-    throw new Error('Adventure-Index konnte nicht geladen werden.');
-  }
-  const data = await res.json();
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.adventures)) return data.adventures;
-  throw new Error('Adventure-Index ist ungültig.');
-}
-
-function selectAdventureEntry(adventures, adventureId) {
-  if (!adventures || !adventures.length) return null;
-  const requestedId = adventureId ? normalizeId(adventureId) : null;
-  if (requestedId) {
-    const match = adventures.find((adv) => normalizeId(adv.id) === requestedId);
-    if (match) return match;
-  }
-  return adventures.find((adv) => adv.default) || adventures[0];
-}
-
-async function loadAdventure(adventureId) {
-  const adventures = await loadAdventureIndex();
-  const selected = selectAdventureEntry(adventures, adventureId);
-  if (!selected) {
-    throw new Error('Kein Adventure verfügbar.');
-  }
-
-  if (normalizeId(selected.id) !== normalizeId(activeAdventureId)) {
-    resetAdventureData(selected.id);
-  }
-
-  setCurrentAdventure(selected);
-
-  const gameMeta = await loadJson('game.json');
-  setCurrentAdventure(selected, gameMeta);
-
-  cache.world = await loadJson('world.json');
-
-  return getCurrentAdventure();
-}
-
-async function ensureAdventure(adventureId) {
-  try {
-    await loadAdventure(adventureId || getCurrentAdventure()?.id);
-  } catch (err) {
-    const msg = err?.message || 'Adventure konnte nicht geladen werden.';
-    if (typeof printLines === 'function') {
-      printLines([msg, ''], 'error');
-    }
-    throw err;
-  }
-}
-
-function saveState() {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(
-    getSaveKey(),
-    JSON.stringify({
-      location: state.location,
-      inventory: state.inventory,
-      flags: state.flags,
-      counters: state.counters,
-      stats: state.stats,
-      inCombat: state.inCombat,
-      enemy: state.enemy,
-      combat: state.combat,
-      visited: state.visited,
-      lockedExits: state.lockedExits,
-      roomSpawns: state.roomSpawns,
-      actorFlags: state.actorFlags,
-      actors: state.actors,
-      npcFlags: state.actorFlags,
-      npcs: state.actors,
-      dialog: state.dialog
-    })
-  );
-}
-
-function loadStateFromSave() {
-  if (typeof localStorage === 'undefined') return false;
-  const raw = localStorage.getItem(getSaveKey());
-  if (!raw) return false;
-  try {
-    const saved = JSON.parse(raw);
-    state = createEmptyState();
-    Object.assign(state, saved);
-    state.inventory = migrateInventory(state.inventory);
-    if (!state.stats) {
-      state.stats = { ...defaultStats };
-    }
-    if (!state.stats.maxHp) {
-      state.stats.maxHp = defaultStats.maxHp;
-    }
-    if (!state.dialog) {
-      state.dialog = { active: false, actorId: null, npcId: null, nodeId: null };
-    }
-    if (!state.combat) {
-      state.combat = { defending: false, enemyStartHp: null };
-    }
-    if (!state.actorFlags) {
-      state.actorFlags = state.npcFlags ? { ...state.npcFlags } : {};
-    }
-    if (!state.counters) {
-      state.counters = {};
-    }
-    if (!state.roomSpawns) {
-      state.roomSpawns = {};
-    }
-    if (!state.actors) {
-      state.actors = state.npcs ? { ...state.npcs } : {};
-    }
-    ensureActorContainers();
-    state.dialog.actorId = state.dialog.actorId || state.dialog.npcId || null;
-    state.dialog.npcId = state.dialog.actorId;
-    Object.keys(state.roomSpawns || {}).forEach((roomId) => ensureRoomSpawn(roomId));
-    return true;
-  } catch (err) {
-    console.error('Savegame fehlerhaft:', err);
-    return false;
-  }
-}
-
-function clearSave() {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(getSaveKey());
-}
-
-function normalizeId(str) {
-  return (str || '')
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe')
-    .replace(/ü/g, 'ue')
-    .replace(/ß/g, 'ss');
-}
-
-function findMatchByNormalized(list = [], query = '') {
-  const normalizedQuery = normalizeId(query);
-  if (!normalizedQuery) return null;
-  const ids = list
-    .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
-    .filter(Boolean);
-  const exact = ids.find((id) => normalizeId(id) === normalizedQuery);
-  if (exact) return exact;
-  return ids.find((id) => normalizeId(id).includes(normalizedQuery)) || null;
-}
-
 function resetRecipeData() {
   recipeIndex = [];
   recipeKeyIndex = new Map();
@@ -837,6 +618,30 @@ function normalizeRecipeTools(tools = []) {
       consume: tool.consume === true
     }))
     .filter((tool) => tool.id);
+}
+
+// --- Helpers & Logic ---
+
+function normalizeId(str) {
+  return (str || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss");
+}
+
+function findMatchByNormalized(list = [], query = '') {
+  const normalizedQuery = normalizeId(query);
+  if (!normalizedQuery) return null;
+  const ids = list
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean);
+  const exact = ids.find((id) => normalizeId(id) === normalizedQuery);
+  if (exact) return exact;
+  return ids.find((id) => normalizeId(id).includes(normalizedQuery)) || null;
 }
 
 function flagMatches(condition) {
@@ -873,6 +678,8 @@ function buildVisibleChoices(node = {}) {
   });
   return visible;
 }
+
+// --- Display / Interactions ---
 
 async function describeInventory() {
   ensureAdventureUI();
@@ -936,17 +743,18 @@ async function showRoom(firstTime = false, options = {}) {
   if (room.objects && room.objects.length) {
     lines.push('Objekte: ' + room.objects.join(', '));
   }
+  
+  // Actors (Wesen/Personen) anzeigen
   const actorsInRoom = await listActorsInRoom(room.id);
   if (actorsInRoom.length) {
-    const labels = actorsInRoom.map(({ actor, qty }) => {
-      const name = actor.name || actor.id;
-      const qtyLabel = qty > 1 ? ` x${qty}` : '';
-      const hostile = actor.combat?.enabled || actor.type === 'enemy';
-      const hostileLabel = hostile ? ' [feindlich]' : '';
-      return `${name}${qtyLabel}${hostileLabel}`;
+    const actorNames = actorsInRoom.map((a) => {
+        let name = a.name || a.id;
+        if (a.hostile || a.behavior?.hostile) name += ' (feindselig)';
+        return name;
     });
-    lines.push('Akteure: ' + labels.join(', '));
+    lines.push('Wesen: ' + actorNames.join(', '));
   }
+  
   const exits = Object.keys(room.exits || {});
   if (exits.length) {
     lines.push('Ausgänge: ' + exits.join(', '));
@@ -965,14 +773,13 @@ function ctxForEvents() {
   return {
     saveState,
     showCurrentRoom: async (first = false, opts = {}) => showRoom(first, opts),
-    startCombat: async (enemyId) => startCombat(enemyId, state, ctxForEvents()),
-    loadActor,
-    loadEnemy,
+    startCombat: async (actorId) => startCombat(actorId, state, ctxForEvents()),
+    loadActor, // Unified
     loadItem,
     getInvQty: (id) => getInvQty(id),
     addToInventory: async (id, qty = 1) => addToInventory(id, qty),
     removeFromInventory: (id, qty = 1) => removeFromInventory(id, qty),
-    startDialog: async (npcId, nodeId = null) => startDialogWithNpc(npcId, nodeId),
+    startDialog: async (actorId, nodeId = null) => startDialogWithActor(actorId, nodeId),
     endDialog: () => endDialog(),
     gotoDialogNode: async (nodeId) => gotoDialogNode(nodeId),
     showDialogNode: async () => showDialogNode(),
@@ -981,16 +788,14 @@ function ctxForEvents() {
     setCounter: (key, value) => setCounter(key, value),
     getCounter: (key) => getCounter(key),
     spawnItem: (roomId, itemId, qty) => addSpawnedItem(roomId, itemId, qty),
-    spawnActor: (roomId, actorId, qty) => addSpawnedActor(roomId, actorId, qty),
-    spawnEnemy: (roomId, enemyId, qty) => addSpawnedActor(roomId, enemyId, qty),
-    spawnNpc: (roomId, npcId) => addSpawnedActor(roomId, npcId, 1),
+    spawnActor: (roomId, actorId) => addSpawnedActor(roomId, actorId),
     moveActor: (actorId, roomId) => moveActorToRoom(actorId, roomId),
-    moveNpc: (npcId, roomId) => moveActorToRoom(npcId, roomId),
-    npcIsInRoom: (npcId, roomId) => actorIsInRoom(npcId, roomId),
     actorIsInRoom: (actorId, roomId) => actorIsInRoom(actorId, roomId),
     getRoomSpawns: (roomId) => ensureRoomSpawn(roomId)
   };
 }
+
+// --- Action Implementations ---
 
 async function performMove(action) {
   const room = await loadRoom(state.location);
@@ -1052,7 +857,6 @@ async function performTake(action) {
 async function performInspect(action) {
   const room = await loadRoom(state.location);
 
-  // Kein Objekt angegeben → Umgebung / Raumbeschreibung erneut anzeigen
   if (!action.object) {
     await showRoom(false, { recordVisit: false });
     return;
@@ -1060,20 +864,30 @@ async function performInspect(action) {
 
   const candidates = (room.objects || []).concat(room.items || []);
   const match = findMatchByNormalized(candidates, action.object);
-  if (!match) {
-    advLog(['Nichts Besonderes.']);
-    return;
+  
+  if (match) {
+      if (room.objects.includes(match)) {
+        const obj = await loadObject(match);
+        const lines = [`${obj.name}: ${obj.description}`];
+        advLog(lines);
+        await runEvents(obj.inspect || [], state, ctxForEvents());
+        return;
+      } else if (room.items.includes(match) || hasInventoryItem(match)) {
+        const item = await loadItem(match);
+        advLog([`${item.name}: ${item.description}`]);
+        return;
+      }
+  }
+  
+  // Actors untersuchen
+  const actors = await listActorsInRoom(state.location);
+  const actorMatch = actors.find(a => normalizeId(a.name || a.id).includes(normalizeId(action.object)));
+  if (actorMatch) {
+      advLog([`${actorMatch.name}: ${actorMatch.description || 'Sieht unauffällig aus.'}`]);
+      return;
   }
 
-  if (room.objects.includes(match)) {
-    const obj = await loadObject(match);
-    const lines = [`${obj.name}: ${obj.description}`];
-    advLog(lines);
-    await runEvents(obj.inspect || [], state, ctxForEvents());
-  } else if (room.items.includes(match) || hasInventoryItem(match)) {
-    const item = await loadItem(match);
-    advLog([`${item.name}: ${item.description}`]);
-  }
+  advLog(['Nichts Besonderes.']);
 }
 
 async function performUse(action) {
@@ -1257,12 +1071,11 @@ async function performCombine(action) {
   advLog(['Das lässt sich nicht kombinieren.']);
 }
 
+// --- Dialog System ---
+
 async function performTalk(action) {
   const actors = await listActorsInRoom(state.location);
-  const talkable = actors
-    .map((entry) => entry.actor)
-    .filter((actor) => actor && (actor.dialog_start || actor.dialog || !(actor.type === 'enemy' || actor.stats)));
-  if (!talkable.length) {
+  if (!actors.length) {
     dialogLog(['Niemand antwortet.']);
     return;
   }
@@ -1270,21 +1083,29 @@ async function performTalk(action) {
   let target = null;
   if (action.object) {
     const normalized = normalizeId(action.object);
-    target = talkable.find(
-      (actor) => normalizeId(actor.id) === normalized || normalizeId(actor.name || '').includes(normalized)
+    target = actors.find(
+      (a) => normalizeId(a.id) === normalized || normalizeId(a.name || '').includes(normalized)
     );
   }
 
   if (!target) {
-    target = talkable.length === 1 ? talkable[0] : null;
+    target = actors.length === 1 ? actors[0] : null;
   }
 
   if (!target) {
     dialogLog(['Niemand antwortet.']);
     return;
   }
+  
+  // Wenn der Actor feindselig ist, kämpfen wir vielleicht eher? 
+  // Hier lassen wir Dialog zu, es sei denn das Script blockt es.
+  
+  if (!target.dialog_start) {
+      dialogLog([`${target.name || 'Das Wesen'} hat nichts zu sagen.`]);
+      return;
+  }
 
-  await startDialogWithNpc(target.id, target.dialog_start);
+  await startDialogWithActor(target.id, target.dialog_start);
 }
 
 function dialogLog(lines = [], cls) {
@@ -1298,7 +1119,7 @@ function dialogLog(lines = [], cls) {
 
 function endDialog(showMessage = false) {
   if (!state.dialog.active) return;
-  state.dialog = { active: false, actorId: null, npcId: null, nodeId: null };
+  state.dialog = { active: false, actorId: null, nodeId: null };
   saveState();
   if (showMessage) {
     dialogLog(['(Dialog beendet)']);
@@ -1308,10 +1129,9 @@ function endDialog(showMessage = false) {
 async function showDialogNode() {
   if (!state.dialog.active) return;
   ensureAdventureUI();
-  const actorId = state.dialog.actorId || state.dialog.npcId;
-  const npc = await loadActor(actorId);
-  const dialog = await loadDialog(actorId);
-  const nodeId = state.dialog.nodeId || dialog.start || npc.dialog_start || 'start';
+  const actor = await loadActor(state.dialog.actorId);
+  const dialog = await loadDialog(state.dialog.actorId);
+  const nodeId = state.dialog.nodeId || dialog.start || actor.dialog_start || 'start';
   const node = dialog.nodes ? dialog.nodes[nodeId] : null;
   if (!node) {
     dialogLog(['(Dialog konnte nicht geladen werden.)']);
@@ -1328,7 +1148,7 @@ async function showDialogNode() {
 
   const visibleChoices = buildVisibleChoices(node);
   const lines = [];
-  lines.push(`— ${npc.name || npc.id} —`);
+  lines.push(`— ${actor.name || actor.id} —`);
   if (node.text) {
     lines.push(node.text);
   }
@@ -1354,10 +1174,9 @@ async function showDialogNode() {
 
 async function handleDialogChoice(index) {
   if (!state.dialog.active) return;
-  const actorId = state.dialog.actorId || state.dialog.npcId;
-  const dialog = await loadDialog(actorId);
-  const npc = await loadActor(actorId);
-  const nodeId = state.dialog.nodeId || dialog.start || npc.dialog_start || 'start';
+  const dialog = await loadDialog(state.dialog.actorId);
+  const actor = await loadActor(state.dialog.actorId);
+  const nodeId = state.dialog.nodeId || dialog.start || actor.dialog_start || 'start';
   const node = dialog.nodes ? dialog.nodes[nodeId] : null;
   if (!node) {
     endDialog();
@@ -1386,7 +1205,7 @@ async function handleDialogChoice(index) {
 
   if (!state.dialog.active) return;
 
-  const nextNode = selected.choice.next || dialog.start || npc.dialog_start;
+  const nextNode = selected.choice.next || dialog.start || actor.dialog_start;
   if (nextNode === 'end' || !dialog.nodes?.[nextNode]) {
     endDialog();
     return;
@@ -1397,13 +1216,20 @@ async function handleDialogChoice(index) {
   await showDialogNode();
 }
 
-async function startDialogWithNpc(npcId, nodeId = null) {
-  const npc = await loadActor(npcId);
-  const dialog = await loadDialog(npc.id);
-  const startNode = nodeId || dialog.start || npc.dialog_start || 'start';
-  state.dialog = { active: true, actorId: npc.id, npcId: npc.id, nodeId: startNode };
-  saveState();
-  await showDialogNode();
+async function startDialogWithActor(actorId, nodeId = null) {
+  const actor = await loadActor(actorId);
+  // Wenn Dialog nicht existiert, aber actor existiert, könnte das ein Fehler sein
+  // oder der Actor hat keinen separaten Dialogfile. Wir checken hier minimal.
+  try {
+      const dialog = await loadDialog(actor.id);
+      const startNode = nodeId || dialog.start || actor.dialog_start || 'start';
+      state.dialog = { active: true, actorId: actor.id, nodeId: startNode };
+      saveState();
+      await showDialogNode();
+  } catch (e) {
+      dialogLog(['Diesem Wesen scheint die Sprache zu fehlen.']);
+      console.warn('Dialog Start failed', e);
+  }
 }
 
 async function gotoDialogNode(nodeId) {
@@ -1412,6 +1238,8 @@ async function gotoDialogNode(nodeId) {
   saveState();
   await showDialogNode();
 }
+
+// --- Main Input Loop ---
 
 async function handleAction(action) {
   if (!action || !action.verb) {
@@ -1484,9 +1312,6 @@ function printHelp() {
 }
 
 export const adventure = {
-	setAdventureIndex(list) {
-	  injectedAdventureIndex = Array.isArray(list) ? list : null;
-	},
   async loadAdventure(adventureId) {
     await ensureAdventure(adventureId);
     return getCurrentAdventure();
@@ -1591,5 +1416,68 @@ export const adventure = {
   }
 };
 
+// --- Adventure Loader Helper ---
+
+function resetAdventureData(id) {
+  cache = createEmptyCache();
+  state = createEmptyState();
+  resetRecipeData();
+  activeAdventureId = id;
+  adventureActive = false;
+}
+
+async function loadAdventureIndex() {
+  const res = await fetch(ADVENTURE_INDEX);
+  if (!res.ok) {
+    throw new Error('Adventure-Index konnte nicht geladen werden.');
+  }
+  const data = await res.json();
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.adventures)) return data.adventures;
+  throw new Error('Adventure-Index ist ungültig.');
+}
+
+function selectAdventureEntry(adventures, adventureId) {
+  if (!adventures || !adventures.length) return null;
+  const requestedId = adventureId ? normalizeId(adventureId) : null;
+  if (requestedId) {
+    const match = adventures.find((adv) => normalizeId(adv.id) === requestedId);
+    if (match) return match;
+  }
+  return adventures.find((adv) => adv.default) || adventures[0];
+}
+
+async function loadAdventure(adventureId) {
+  const adventures = await loadAdventureIndex();
+  const selected = selectAdventureEntry(adventures, adventureId);
+  if (!selected) {
+    throw new Error('Kein Adventure verfügbar.');
+  }
+
+  if (normalizeId(selected.id) !== normalizeId(activeAdventureId)) {
+    resetAdventureData(selected.id);
+  }
+
+  setCurrentAdventure(selected);
+
+  const gameMeta = await loadJson('game.json');
+  setCurrentAdventure(selected, gameMeta);
+
+  cache.world = await loadJson('world.json');
+
+  return getCurrentAdventure();
+}
+
+async function ensureAdventure(adventureId) {
+  try {
+    await loadAdventure(adventureId || getCurrentAdventure()?.id);
+  } catch (err) {
+    const msg = err?.message || 'Adventure konnte nicht geladen werden.';
+    if (typeof printLines === 'function') {
+      printLines([msg, ''], 'error');
+    }
+    throw err;
+  }
+}
 
 export default adventure;

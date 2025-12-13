@@ -47,23 +47,28 @@ export function ensureAdventureUI() {
 
 export function renderStatus(state) {
   if (!advStatusEl || !state) return;
+  
+  // Spieler Stats
   const hp = state.stats?.hp ?? '-';
   const maxHp = state.stats?.maxHp ?? null;
   const atk = state.stats?.attack ?? '-';
   const def = state.stats?.defense ?? '-';
   const hpText = maxHp ? `${Math.max(hp, 0)}/${maxHp}` : hp;
   const guard = state.combat?.defending ? ' (Verteidigung)' : '';
+  
   let status = `[${state.location}]  HP ${hpText}  ⚔ ${atk}  🛡 ${def}${guard}`;
-  if (state.inCombat) {
-    const combatant = state.actor || state.enemy;
-    if (combatant) {
-      const stats = combatant.stats || {};
-      const enemyHp = Math.max(stats.hp ?? combatant.hp ?? 0, 0);
-      const enemyDef = stats.defense ?? combatant.defense ?? '-';
-      const enemyAtk = stats.attack ?? combatant.attack ?? '-';
-      const enemyLabel = combatant.name || combatant.id || 'Gegner';
-      status += `  | Gegner: ${enemyLabel} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
-    }
+
+  // Kampf-Status (angepasst auf Actor/Opponent Logik)
+  // Wir unterstützen activeOpponent (neu) und enemy (legacy fallback)
+  const opponent = state.activeOpponent || state.enemy;
+  
+  if (state.inCombat && opponent) {
+    const oppHp = Math.max(opponent.stats?.hp ?? 0, 0);
+    const oppDef = opponent.stats?.defense ?? '-';
+    const oppAtk = opponent.stats?.attack ?? '-';
+    const name = opponent.name || opponent.id || 'Gegner';
+    
+    status += `  | Gegner: ${name} (${oppHp} HP, ⚔ ${oppAtk} 🛡 ${oppDef})`;
   }
 
   advStatusEl.textContent = status;

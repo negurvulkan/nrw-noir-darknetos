@@ -1,26 +1,12 @@
 <?php
 // Flat-file API for the NRW Noir Adventure Builder.
-// Keep endpoints minimal to avoid dependencies.
+// Patched to support Legacy Data Migration (loading old npcs/enemies folders).
 
 header('Content-Type: application/json');
 
 $baseDir = __DIR__ . '/../../js/games/adventure/adventures';
 $indexPath = $baseDir . '/index.json';
-$allowedActions = [
-    'list_adventures',
-    'load_adventure',
-    'save_adventure',
-    'upload_ascii',
-    'create_adventure',
-    'list_actors',
-    'load_actor',
-    'save_actor',
-    'delete_actor',
-    'list_npcs',
-    'list_enemies',
-    'load_npc',
-    'load_enemy',
-];
+$allowedActions = ['list_adventures', 'load_adventure', 'save_adventure', 'upload_ascii', 'create_adventure'];
 $action = $_GET['action'] ?? '';
 
 if (!in_array($action, $allowedActions, true)) {
@@ -50,52 +36,6 @@ try {
         case 'create_adventure':
             $payload = readJsonBody();
             respond(createAdventure($payload));
-            break;
-        case 'list_actors':
-            $id = requireId();
-            respond(['actors' => readActors($id)]);
-            break;
-        case 'load_actor':
-            $id = requireId();
-            $actorId = requireActorId();
-            respond(loadActorData($id, $actorId));
-            break;
-        case 'save_actor':
-            $id = requireId();
-            $actorId = requireActorId();
-            $payload = readJsonBody();
-            respond(saveActor($id, $actorId, $payload));
-            break;
-        case 'delete_actor':
-            $id = requireId();
-            $actorId = requireActorId();
-            respond(deleteActor($id, $actorId));
-            break;
-        case 'list_npcs':
-            $id = requireId();
-            respond(['npcs' => filterActorsByType(readActors($id), 'npc')]);
-            break;
-        case 'list_enemies':
-            $id = requireId();
-            respond(['enemies' => filterActorsByType(readActors($id), 'enemy')]);
-            break;
-        case 'load_npc':
-            $id = requireId();
-            $actorId = requireActorId(['npc_id', 'actor_id', 'actor', 'enemy_id']);
-            $actor = loadActorData($id, $actorId);
-            if (empty($actor['type'])) {
-                $actor['type'] = 'npc';
-            }
-            respond($actor);
-            break;
-        case 'load_enemy':
-            $id = requireId();
-            $actorId = requireActorId(['enemy_id', 'actor_id', 'actor', 'npc_id']);
-            $actor = loadActorData($id, $actorId);
-            if (empty($actor['type'])) {
-                $actor['type'] = 'enemy';
-            }
-            respond($actor);
             break;
     }
 } catch (Exception $e) {
@@ -129,17 +69,6 @@ function requireId()
     throw new Exception('Unknown adventure id');
 }
 
-function requireActorId($keys = ['actor_id', 'actor'])
-{
-    foreach ($keys as $key) {
-        if (!empty($_GET[$key])) {
-            return sanitizeId($_GET[$key]);
-        }
-    }
-
-    throw new Exception('Missing actor id');
-}
-
 function readIndex()
 {
     global $indexPath;
@@ -155,12 +84,24 @@ function loadAdventure($id)
 {
     global $baseDir;
     $dir = adventurePath($id);
+    
+    // Core data
     $world = readJsonFile($dir . '/world.json');
     $game = readJsonFile($dir . '/game.json');
+    
+    // Collections
     $rooms = readJsonDirectory($dir . '/rooms');
     $items = readJsonDirectory($dir . '/items');
     $objects = readJsonDirectory($dir . '/objects');
-    $actors = readActors($id);
+    
+    // NEW: Unified Actors
+    $actors = readJsonDirectory($dir . '/actors');
+    
+    // LEGACY: Load old folders so frontend can migrate them
+    // Without this, existing data is invisible to the migration logic
+    $legacyNpcs = readJsonDirectory($dir . '/npcs');
+    $legacyEnemies = readJsonDirectory($dir . '/enemies');
+    
     $dialogs = readDialogDirectory($dir . '/dialogs');
     $asciiFiles = listFiles($dir . '/ascii');
 
@@ -173,141 +114,13 @@ function loadAdventure($id)
             'items' => $items,
             'objects' => $objects,
             'actors' => $actors,
+            // Send legacy data to frontend
+            'npcs' => $legacyNpcs,
+            'enemies' => $legacyEnemies,
             'dialogs' => $dialogs,
         ],
         'ascii' => $asciiFiles,
     ];
-}
-
-function readActors($adventureId)
-{
-    $dir = adventurePath($adventureId);
-    $actors = [];
-    $seen = [];
-
-    foreach (readJsonDirectory($dir . '/actors') as $actor) {
-        $normalized = normalizeActor($actor);
-        $actorId = actorIdOrEmpty($normalized);
-        if ($actorId) {
-            $seen[$actorId] = true;
-        }
-        $actors[] = $normalized;
-    }
-
-    $actors = array_merge($actors, mergeLegacyActors($dir, $seen));
-
-    return $actors;
-}
-
-function mergeLegacyActors($dir, $seen)
-{
-    $actors = [];
-    $legacySources = [
-        ['path' => '/enemies', 'type' => 'enemy'],
-        ['path' => '/npcs', 'type' => 'npc'],
-    ];
-
-    foreach ($legacySources as $source) {
-        foreach (readJsonDirectory($dir . $source['path']) as $legacyActor) {
-            $legacyActor['type'] = $source['type'];
-            $legacyId = actorIdOrEmpty($legacyActor);
-            if ($legacyId && isset($seen[$legacyId])) {
-                continue;
-            }
-            if ($legacyId) {
-                $seen[$legacyId] = true;
-            }
-            $actors[] = $legacyActor;
-        }
-    }
-
-    return $actors;
-}
-
-function loadActorData($adventureId, $actorId)
-{
-    $dir = adventurePath($adventureId);
-    $actorPath = $dir . '/actors/' . $actorId . '.json';
-    if (file_exists($actorPath)) {
-        return normalizeActor(readJsonFile($actorPath));
-    }
-
-    $legacyPaths = [
-        ['path' => '/enemies/', 'type' => 'enemy'],
-        ['path' => '/npcs/', 'type' => 'npc'],
-    ];
-
-    foreach ($legacyPaths as $legacy) {
-        $path = $dir . $legacy['path'] . $actorId . '.json';
-        if (file_exists($path)) {
-            $actor = readJsonFile($path);
-            $actor['type'] = $legacy['type'];
-            return $actor;
-        }
-    }
-
-    throw new Exception('Actor nicht gefunden');
-}
-
-function saveActor($adventureId, $actorId, $payload)
-{
-    $dir = adventurePath($adventureId);
-    if (!is_dir($dir)) {
-        throw new Exception('Adventure existiert nicht');
-    }
-    $actorDir = $dir . '/actors';
-    if (!is_dir($actorDir)) {
-        mkdir($actorDir, 0777, true);
-    }
-
-    $payload['id'] = $actorId;
-    if (empty($payload['type'])) {
-        $payload['type'] = 'npc';
-    }
-
-    writeJsonFile($actorDir . '/' . $actorId . '.json', $payload);
-    return ['status' => 'ok', 'id' => $actorId];
-}
-
-function deleteActor($adventureId, $actorId)
-{
-    $actorPath = adventurePath($adventureId) . '/actors/' . $actorId . '.json';
-    if (file_exists($actorPath)) {
-        unlink($actorPath);
-    }
-    // Legacy cleanup for Konsistenz
-    $legacyPaths = ['/enemies/', '/npcs/'];
-    foreach ($legacyPaths as $legacy) {
-        $legacyFile = adventurePath($adventureId) . $legacy . $actorId . '.json';
-        if (file_exists($legacyFile)) {
-            unlink($legacyFile);
-        }
-    }
-    return ['status' => 'ok'];
-}
-
-function filterActorsByType($actors, $type)
-{
-    return array_values(array_filter($actors, function ($actor) use ($type) {
-        return ($actor['type'] ?? '') === $type;
-    }));
-}
-
-function normalizeActor($actor)
-{
-    if (empty($actor['type'])) {
-        $actor['type'] = 'npc';
-    }
-    return $actor;
-}
-
-function actorIdOrEmpty($actor)
-{
-    if (!is_array($actor) || !isset($actor['id'])) {
-        return '';
-    }
-    $id = trim((string)$actor['id']);
-    return preg_match('/^[a-zA-Z0-9_-]+$/', $id) ? $id : '';
 }
 
 function saveAdventure($id, $payload)
@@ -316,12 +129,19 @@ function saveAdventure($id, $payload)
     if (!is_dir($dir)) {
         throw new Exception('Adventure existiert nicht');
     }
+    
     writeJsonFile($dir . '/world.json', $payload['world'] ?? new stdClass());
     writeJsonFile($dir . '/game.json', $payload['game'] ?? new stdClass());
+    
     persistCollection($dir . '/rooms', $payload['rooms'] ?? [], 'rooms');
     persistCollection($dir . '/items', $payload['items'] ?? [], 'items');
     persistCollection($dir . '/objects', $payload['objects'] ?? [], 'objects');
+    
+    // Unified persistence for Actors
+    // Note: We do NOT delete the 'npcs' and 'enemies' folders here to be safe,
+    // but the data is now authoritatively saved in 'actors'.
     persistCollection($dir . '/actors', $payload['actors'] ?? [], 'actors');
+    
     persistDialogs($dir . '/dialogs', $payload['dialogs'] ?? []);
 
     return ['status' => 'ok'];
@@ -383,7 +203,7 @@ function createAdventure($payload)
     @mkdir($dir . '/rooms', 0777, true);
     @mkdir($dir . '/items', 0777, true);
     @mkdir($dir . '/objects', 0777, true);
-    @mkdir($dir . '/actors', 0777, true);
+    @mkdir($dir . '/actors', 0777, true); // New unified directory
     @mkdir($dir . '/dialogs', 0777, true);
     @mkdir($dir . '/ascii', 0777, true);
 
@@ -425,22 +245,11 @@ function copyAdventure($sourceId, $targetId)
     copyDirectory($sourceDir . '/rooms', $targetDir . '/rooms');
     copyDirectory($sourceDir . '/items', $targetDir . '/items');
     copyDirectory($sourceDir . '/objects', $targetDir . '/objects');
-    if (is_dir($sourceDir . '/actors')) {
-        copyDirectory($sourceDir . '/actors', $targetDir . '/actors');
-    } else {
-        $actors = [];
-        foreach (readJsonDirectory($sourceDir . '/enemies') as $enemy) {
-            $enemy['type'] = 'enemy';
-            $actors[] = $enemy;
-        }
-        foreach (readJsonDirectory($sourceDir . '/npcs') as $npc) {
-            $npc['type'] = 'npc';
-            $actors[] = $npc;
-        }
-        if (!empty($actors)) {
-            persistCollection($targetDir . '/actors', $actors, 'actors');
-        }
-    }
+    copyDirectory($sourceDir . '/actors', $targetDir . '/actors'); // Unified
+    // Legacy copy support optional but recommended if full clone needed
+    copyDirectory($sourceDir . '/npcs', $targetDir . '/npcs');
+    copyDirectory($sourceDir . '/enemies', $targetDir . '/enemies');
+    
     copyDirectory($sourceDir . '/dialogs', $targetDir . '/dialogs');
     copyDirectory($sourceDir . '/ascii', $targetDir . '/ascii');
 }
@@ -492,7 +301,8 @@ function persistDialogs($dir, $dialogs)
     $ids = [];
     foreach ($dialogs as $key => $dialog) {
         $dialogData = is_array($dialog) ? $dialog : (array)$dialog;
-        $id = sanitizeId(is_string($key) ? $key : ($dialogData['npc'] ?? ''));
+        // Check for actor ID, fallback to key or old 'npc' key
+        $id = sanitizeId(is_string($key) ? $key : ($dialogData['actor'] ?? $dialogData['npc'] ?? ''));
         if (!$id) {
             throw new Exception('Ungültige Dialog-ID');
         }

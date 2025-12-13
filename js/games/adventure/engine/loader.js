@@ -10,6 +10,7 @@ function buildDataUrl(path) {
 
 /**
  * Load a JSON file relative to the adventure data root.
+ * Used for loading rooms, items, actors (formerly npcs/enemies), etc.
  * @param {string} path Relative path inside the data directory.
  */
 export async function loadJson(path) {
@@ -21,93 +22,6 @@ export async function loadJson(path) {
   return res.json();
 }
 
-function normalizeLegacyStats(data = {}) {
-  if (data.stats && typeof data.stats === 'object') {
-    return data.stats;
-  }
-  if (data.attributes && typeof data.attributes === 'object') {
-    return data.attributes;
-  }
-
-  const hp = data.hp ?? data.health ?? data.maxHp;
-  const attack = data.attack;
-  const defense = data.defense;
-  if ([hp, attack, defense].some((value) => Number.isFinite(value))) {
-    const stats = {};
-    if (Number.isFinite(hp)) {
-      stats.hp = hp;
-      stats.maxHp = data.maxHp ?? hp;
-    }
-    if (Number.isFinite(attack)) {
-      stats.attack = attack;
-    }
-    if (Number.isFinite(defense)) {
-      stats.defense = defense;
-    }
-    return stats;
-  }
-  return null;
-}
-
-function normalizeLegacyDialog(data = {}) {
-  const dialogStart = data.dialog?.start || data.dialog_start || data.dialogStart;
-  if (!dialogStart && !data.dialog) return undefined;
-  return { ...(data.dialog || {}), start: dialogStart || data.dialog?.start };
-}
-
-function normalizeLegacyCombat(data = {}) {
-  const enabledFromData =
-    data.combat?.enabled ?? data.combat_enabled ?? data.combatEnabled ??
-    (data.stats ? true : undefined);
-
-  if (!data.combat && enabledFromData === undefined) return undefined;
-  return { ...(data.combat || {}), enabled: enabledFromData ?? data.combat?.enabled ?? false };
-}
-
-export function mapLegacyActor(data = {}, fallbackId = null) {
-  const actor = { ...data };
-  const id = actor.id || fallbackId;
-
-  const stats = normalizeLegacyStats(actor);
-  const dialog = normalizeLegacyDialog(actor);
-  const combat = normalizeLegacyCombat({ ...actor, stats });
-
-  return {
-    ...actor,
-    id,
-    name: actor.name || actor.title || id,
-    description: actor.description || actor.desc || actor.text,
-    stats,
-    combat,
-    dialog
-  };
-}
-
-export async function loadActorJson(id) {
-  const attempts = [
-    { path: `actors/${id}.json` },
-    { path: `npcs/${id}.json`, type: 'npc' },
-    { path: `enemies/${id}.json`, type: 'enemy' }
-  ];
-
-  let lastError = null;
-  for (const attempt of attempts) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const raw = await loadJson(attempt.path);
-      const mapped = mapLegacyActor(raw, id);
-      if (attempt.type && !mapped.type) {
-        mapped.type = attempt.type;
-      }
-      return mapped;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError;
-}
-
 /**
  * Load and render ASCII art in the adventure UI when available.
  * Falls back to printing directly into the terminal output.
@@ -117,10 +31,16 @@ export async function loadAscii(asciiConfig) {
   const file = typeof asciiConfig === 'string' ? asciiConfig : asciiConfig.file;
   const fontSize =
     typeof asciiConfig === 'object' ? asciiConfig.fontSize || asciiConfig.size : undefined;
+  
+  if (!file) return '';
+
   const url = buildDataUrl(file);
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`ASCII konnte nicht geladen werden: ${url}`);
+    // Wir werfen hier keinen harten Fehler, damit das Spiel weiterläuft, 
+    // auch wenn ein Bild fehlt.
+    console.warn(`ASCII konnte nicht geladen werden: ${url}`);
+    return '';
   }
   const text = await res.text();
 
@@ -137,6 +57,7 @@ export async function loadAscii(asciiConfig) {
     return text;
   }
 
+  // Fallback for non-browser or missing UI environments
   if (typeof document !== 'undefined' && typeof outputEl !== 'undefined') {
     const pre = document.createElement('pre');
     pre.textContent = text;

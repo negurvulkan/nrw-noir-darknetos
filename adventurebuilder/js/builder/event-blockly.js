@@ -3,17 +3,25 @@ const Blockly = window.Blockly;
 let blockOptions = {
   rooms: [],
   items: [],
-  enemies: [],
-  npcs: [],
+  actors: [], // Neu: Unified list
 };
 
 function setBlockOptions(options = {}) {
   blockOptions = {
     rooms: options.rooms || [],
     items: options.items || [],
-    enemies: options.enemies || [],
-    npcs: options.npcs || [],
+    actors: options.actors || [],
   };
+}
+
+// Helper: Filter actors by type for cleaner dropdowns, fallback to all actors if mixed
+function actorDropdown(typeFilter = null, fallbackLabel = 'actor_id') {
+  const list = blockOptions.actors || [];
+  const filtered = typeFilter 
+    ? list.filter(a => a.type === typeFilter).map(a => a.id)
+    : list.map(a => a.id);
+  
+  return dropdownOptions(filtered, fallbackLabel);
 }
 
 function dropdownOptions(list = [], fallbackValue) {
@@ -61,9 +69,6 @@ const noirTheme = Blockly.Theme.defineTheme('nrw_noir', {
   },
 });
 
-// Blockly 10+ logs deprecation warnings for legacy variable helpers even if
-// the workspace has no variable blocks. Patch the deprecated method to call the
-// modern API without emitting a warning so the console stays clean.
 if (Blockly?.Workspace?.prototype?.getAllVariables && Blockly?.Variables?.allUsedVarModels) {
   Blockly.Workspace.prototype.getAllVariables = function patchedGetAllVariables(opt_type) {
     return Blockly.Variables.allUsedVarModels(this, opt_type);
@@ -179,7 +184,8 @@ function registerBlocks(options = {}) {
       this.setStyle('event_blocks');
       this.appendDummyInput()
         .appendField('Kampf triggern')
-        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.enemies, 'enemy_id')), 'ENEMY');
+        // Erlaubt alle Actors, aber idealerweise Gegner
+        .appendField(new Blockly.FieldDropdown(() => actorDropdown('enemy', 'enemy_id')), 'ENEMY');
       this.setPreviousStatement(true);
       this.setNextStatement(true);
     },
@@ -247,13 +253,17 @@ function registerBlocks(options = {}) {
     },
   };
 
+  // Unified Actor Blocks:
+  // Wir behalten die Namen "Gegner" und "NPC" für die UX bei,
+  // mappen sie intern aber auf die Actors-Liste.
+
   Blockly.Blocks.event_spawn_enemy = {
     init() {
       this.setStyle('event_blocks');
       this.appendDummyInput()
         .appendField('Spawn Gegner in')
         .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM')
-        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.enemies, 'enemy_id')), 'ID')
+        .appendField(new Blockly.FieldDropdown(() => actorDropdown('enemy', 'enemy_id')), 'ID')
         .appendField('Anzahl')
         .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
       this.setPreviousStatement(true);
@@ -266,7 +276,7 @@ function registerBlocks(options = {}) {
       this.setStyle('event_blocks');
       this.appendDummyInput()
         .appendField('Spawn/Move NPC')
-        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField(new Blockly.FieldDropdown(() => actorDropdown('npc', 'npc_id')), 'ID')
         .appendField('nach Raum')
         .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM');
       this.setPreviousStatement(true);
@@ -278,8 +288,8 @@ function registerBlocks(options = {}) {
     init() {
       this.setStyle('event_blocks');
       this.appendDummyInput()
-        .appendField('NPC bewegen')
-        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField('Actor bewegen')
+        .appendField(new Blockly.FieldDropdown(() => actorDropdown(null, 'actor_id')), 'ID')
         .appendField('nach')
         .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM');
       this.setPreviousStatement(true);
@@ -291,9 +301,9 @@ function registerBlocks(options = {}) {
     init() {
       this.setStyle('event_blocks');
       this.appendDummyInput()
-        .appendField('NPC bewegen, wenn in')
+        .appendField('Actor bewegen, wenn in')
         .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'FROM')
-        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField(new Blockly.FieldDropdown(() => actorDropdown(null, 'actor_id')), 'ID')
         .appendField('nach')
         .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'TO');
       this.setPreviousStatement(true);
@@ -362,7 +372,7 @@ function blockToEvent(block) {
     case 'event_transition':
       return { type: 'transition', to: block.getFieldValue('ROOM') || '' };
     case 'event_trigger_fight':
-      return { type: 'trigger_fight', enemy: block.getFieldValue('ENEMY') || '' };
+      return { type: 'trigger_fight', actor: block.getFieldValue('ENEMY') || '' }; // changed key to actor
     case 'event_flag_if':
       return {
         type: 'flag_if',
@@ -392,19 +402,21 @@ function blockToEvent(block) {
         qty: Number(block.getFieldValue('QTY')) || 1,
       };
     case 'event_spawn_enemy':
+      // Map legacy spawn_enemy to spawn_actor
       return {
-        type: 'spawn_enemy',
+        type: 'spawn_actor',
         room: block.getFieldValue('ROOM') || '',
         id: block.getFieldValue('ID') || '',
         qty: Number(block.getFieldValue('QTY')) || 1,
       };
     case 'event_spawn_npc':
-      return { type: 'spawn_npc', id: block.getFieldValue('ID') || '', room: block.getFieldValue('ROOM') || '' };
+      // Map legacy spawn_npc to spawn_actor
+      return { type: 'spawn_actor', id: block.getFieldValue('ID') || '', room: block.getFieldValue('ROOM') || '' };
     case 'event_npc_move':
-      return { type: 'npc_move', id: block.getFieldValue('ID') || '', to: block.getFieldValue('ROOM') || '' };
+      return { type: 'actor_move', id: block.getFieldValue('ID') || '', to: block.getFieldValue('ROOM') || '' };
     case 'event_npc_move_if_present':
       return {
-        type: 'npc_move_if_present',
+        type: 'actor_move_if_present',
         id: block.getFieldValue('ID') || '',
         from: block.getFieldValue('FROM') || '',
         to: block.getFieldValue('TO') || ''
@@ -470,7 +482,8 @@ function buildBlockForEvent(event, workspace) {
       break;
     case 'trigger_fight':
       block = workspace.newBlock('event_trigger_fight');
-      block.setFieldValue(event.enemy || '', 'ENEMY');
+      // Supporte beide Keys (alt 'enemy', neu 'actor')
+      block.setFieldValue(event.actor || event.enemy || '', 'ENEMY');
       break;
     case 'flag_if': {
       block = workspace.newBlock('event_flag_if');
@@ -509,26 +522,39 @@ function buildBlockForEvent(event, workspace) {
       block.setFieldValue(event.id || '', 'ID');
       block.setFieldValue(String(event.qty || 1), 'QTY');
       break;
-    case 'spawn_enemy':
-      block = workspace.newBlock('event_spawn_enemy');
-      block.setFieldValue(event.room || '', 'ROOM');
-      block.setFieldValue(event.id || '', 'ID');
-      block.setFieldValue(String(event.qty || 1), 'QTY');
-      break;
+    
+    // Mapping der Unified Events zurück auf spezifische Blöcke für die Anzeige
+    case 'spawn_actor':
+    case 'spawn_enemy': 
     case 'spawn_npc':
-      block = workspace.newBlock('event_spawn_npc');
-      block.setFieldValue(event.id || '', 'ID');
-      block.setFieldValue(event.room || '', 'ROOM');
+      {
+        // Einfache Heuristik: Hat Qty? -> Enemy Block, sonst NPC Block (Visualisierung)
+        const isQty = (event.qty && event.qty > 1) || (event.type === 'spawn_enemy');
+        if (isQty) {
+          block = workspace.newBlock('event_spawn_enemy');
+          block.setFieldValue(event.room || '', 'ROOM');
+          block.setFieldValue(event.id || event.actor || event.enemy || '', 'ID');
+          block.setFieldValue(String(event.qty || 1), 'QTY');
+        } else {
+          block = workspace.newBlock('event_spawn_npc');
+          block.setFieldValue(event.id || event.actor || event.npc || '', 'ID');
+          block.setFieldValue(event.room || '', 'ROOM');
+        }
+      }
       break;
+    
+    case 'actor_move':
     case 'npc_move':
       block = workspace.newBlock('event_npc_move');
-      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(event.id || event.actor || event.npc || '', 'ID');
       block.setFieldValue(event.to || '', 'ROOM');
       break;
+      
+    case 'actor_move_if_present':
     case 'npc_move_if_present':
       block = workspace.newBlock('event_npc_move_if_present');
       block.setFieldValue(event.from || '', 'FROM');
-      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(event.id || event.actor || event.npc || '', 'ID');
       block.setFieldValue(event.to || '', 'TO');
       break;
     default:

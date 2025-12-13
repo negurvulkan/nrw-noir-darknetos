@@ -1,6 +1,6 @@
 <?php
 // AI Assist proxy for NRW Noir Adventure Builder
-// Responsible for guarding the OpenAI key, feature flag, simple caching and rate limiting.
+// Refactored to support the unified 'Actor' entity.
 
 header('Content-Type: application/json');
 
@@ -152,8 +152,9 @@ function validateRequest($payload)
     if (!in_array($mode, ['entity', 'events', 'plot'], true)) {
         return 'mode muss entity, events oder plot sein';
     }
-    if ($mode === 'entity' && !in_array($entityType, ['room', 'item', 'object', 'npc', 'enemy'], true)) {
-        return 'entityType fehlt oder ist ungültig';
+    // Updated: supports 'actor' now instead of npc/enemy
+    if ($mode === 'entity' && !in_array($entityType, ['room', 'item', 'object', 'actor'], true)) {
+        return 'entityType fehlt oder ist ungültig (muss room, item, object oder actor sein)';
     }
     return null;
 }
@@ -199,7 +200,8 @@ function buildPrompt($payload)
         'Gib ausschließlich gültiges JSON ohne Markdown oder zusätzlichen Text zurück.',
         'Nutze ASCII-sichere IDs: lowercase, a-z0-9_, ersetze ä->ae, ö->oe, ü->ue, ß->ss.',
         'Vermeide IDs aus existingIds: ' . implode(', ', $existingIds),
-        'Event-Typen: message, ascii, flag_set, flag_if (mit then/else Arrays), add_item, remove_item, unlock_exit, lock_exit, transition, trigger_fight.',
+        // Updated events list with actor_move and spawn_actor
+        'Event-Typen: message, ascii, flag_set, flag_if (mit then/else Arrays), add_item, remove_item, unlock_exit, lock_exit, transition, trigger_fight, spawn_actor, actor_move.',
         'Halte dich an den Style: ' . $style,
     ];
 

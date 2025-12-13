@@ -1,16 +1,23 @@
 [
-  {
-    "id": "dunkler-wald",
-    "title": "Dunkler Wald zur alten Villa",
-    "folder": "dunkler-wald",
-    "description": "Ein rätselhaftes Abenteuer in einem düsteren Wald.",
-    "default": true
-  },
-  {
-    "id": "gotische-chronik",
-    "title": "Schatten der Domruine",
-    "folder": "gotische-chronik",
-    "description": "Gotischer Kurztrip mit Krypta, Turm und kämpferischer Chronistin.",
-    "default": false
-  }
+    {
+        "id": "dunkler-wald",
+        "title": "Dunkler Wald zur alten Villa",
+        "folder": "dunkler-wald",
+        "description": "Ein rätselhaftes Abenteuer in einem düsteren Wald.",
+        "default": true
+    },
+    {
+        "id": "gotische-chronik",
+        "title": "Schatten der Domruine",
+        "folder": "gotische-chronik",
+        "description": "Gotischer Kurztrip mit Krypta, Turm und kämpferischer Chronistin.",
+        "default": false
+    },
+    {
+        "id": "sdrt",
+        "title": "sewt",
+        "folder": "sdrt",
+        "description": "xdr5zt",
+        "default": false
+    }
 ]
