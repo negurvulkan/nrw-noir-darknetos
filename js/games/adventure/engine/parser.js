@@ -75,26 +75,15 @@ export function parseInput(text) {
   const combineMatch =
     lower.match(/^(benutze|nutze|verwende)\s+(.+?)\s+mit\s+(.+)$/) ||
     lower.match(/^use\s+(.+?)\s+with\s+(.+)$/);
-
+  
   if (combineMatch) {
-    // bei den deutschen Varianten: group 2 = Objekt, 3 = Ziel
+    // Deutsch: [1]=verbwort, [2]=obj, [3]=target
     if (combineMatch[1] !== 'use') {
-      return {
-        verb: 'combine',
-        object: combineMatch[2].trim(),
-        target: combineMatch[3].trim(),
-        direction: null,
-        raw
-      };
+      return { verb: 'combine', object: combineMatch[2].trim(), target: combineMatch[3].trim(), direction: null, raw };
     }
-    // englische "use X with Y"
-    return {
-      verb: 'combine',
-      object: combineMatch[1] ? combineMatch[1].trim() : combineMatch[2].trim(),
-      target: combineMatch[2] ? combineMatch[2].trim() : combineMatch[3].trim(),
-      direction: null,
-      raw
-    };
+  
+    // Englisch: [1]=obj, [2]=target
+    return { verb: 'combine', object: combineMatch[1].trim(), target: combineMatch[2].trim(), direction: null, raw };
   }
 
   const tokens = lower.split(/\s+/);
