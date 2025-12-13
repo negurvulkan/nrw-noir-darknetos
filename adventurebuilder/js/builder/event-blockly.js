@@ -1,5 +1,28 @@
 const Blockly = window.Blockly;
 
+let blockOptions = {
+  rooms: [],
+  items: [],
+  enemies: [],
+  npcs: [],
+};
+
+function setBlockOptions(options = {}) {
+  blockOptions = {
+    rooms: options.rooms || [],
+    items: options.items || [],
+    enemies: options.enemies || [],
+    npcs: options.npcs || [],
+  };
+}
+
+function dropdownOptions(list = [], fallbackValue) {
+  if (Array.isArray(list) && list.length) {
+    return list.map((val) => [val, val]);
+  }
+  return [[fallbackValue, fallbackValue]];
+}
+
 const palette = {
   primary: '#b388ff',
   secondary: '#7b4aa8',
@@ -47,7 +70,8 @@ if (Blockly?.Workspace?.prototype?.getAllVariables && Blockly?.Variables?.allUse
   };
 }
 
-function registerBlocks() {
+function registerBlocks(options = {}) {
+  setBlockOptions(options);
   if (!Blockly || Blockly.Blocks.event_message) return;
 
   Blockly.Blocks.event_message = {
@@ -90,7 +114,7 @@ function registerBlocks() {
       this.setStyle('event_blocks');
       this.appendDummyInput()
         .appendField('Item hinzufügen')
-        .appendField(new Blockly.FieldTextInput('item_id'), 'ID')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.items, 'item_id')), 'ID')
         .appendField('Menge')
         .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
       this.setPreviousStatement(true);
@@ -103,7 +127,7 @@ function registerBlocks() {
       this.setStyle('event_blocks');
       this.appendDummyInput()
         .appendField('Item entfernen')
-        .appendField(new Blockly.FieldTextInput('item_id'), 'ID')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.items, 'item_id')), 'ID')
         .appendField('Menge')
         .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
       this.setPreviousStatement(true);
@@ -117,7 +141,7 @@ function registerBlocks() {
       this.appendDummyInput()
         .appendField('Ausgang entsperren')
         .appendField('Raum')
-        .appendField(new Blockly.FieldTextInput('room_id'), 'ROOM')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM')
         .appendField('Richtung')
         .appendField(new Blockly.FieldTextInput('richtung'), 'DIR');
       this.setPreviousStatement(true);
@@ -131,7 +155,7 @@ function registerBlocks() {
       this.appendDummyInput()
         .appendField('Ausgang sperren')
         .appendField('Raum')
-        .appendField(new Blockly.FieldTextInput('room_id'), 'ROOM')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM')
         .appendField('Richtung')
         .appendField(new Blockly.FieldTextInput('richtung'), 'DIR');
       this.setPreviousStatement(true);
@@ -142,7 +166,9 @@ function registerBlocks() {
   Blockly.Blocks.event_transition = {
     init() {
       this.setStyle('event_blocks');
-      this.appendDummyInput().appendField('Wechsel zu Raum').appendField(new Blockly.FieldTextInput('room_id'), 'ROOM');
+      this.appendDummyInput()
+        .appendField('Wechsel zu Raum')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM');
       this.setPreviousStatement(true);
       this.setNextStatement(true);
     },
@@ -151,7 +177,125 @@ function registerBlocks() {
   Blockly.Blocks.event_trigger_fight = {
     init() {
       this.setStyle('event_blocks');
-      this.appendDummyInput().appendField('Kampf triggern').appendField(new Blockly.FieldTextInput('enemy_id'), 'ENEMY');
+      this.appendDummyInput()
+        .appendField('Kampf triggern')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.enemies, 'enemy_id')), 'ENEMY');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_counter_add = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Counter +')
+        .appendField(new Blockly.FieldTextInput('counter_key'), 'KEY')
+        .appendField('Menge')
+        .appendField(new Blockly.FieldNumber(1, 1), 'AMOUNT');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_counter_set = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Counter setzen')
+        .appendField(new Blockly.FieldTextInput('counter_key'), 'KEY')
+        .appendField('=')
+        .appendField(new Blockly.FieldNumber(0), 'VALUE');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_counter_if = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Wenn Counter')
+        .appendField(new Blockly.FieldTextInput('counter_key'), 'KEY')
+        .appendField(new Blockly.FieldDropdown([
+          ['==', '=='],
+          ['!=', '!='],
+          ['<', '<'],
+          ['<=', '<='],
+          ['>', '>'],
+          ['>=', '>='],
+        ]), 'OP')
+        .appendField(new Blockly.FieldNumber(0), 'VALUE');
+      this.appendStatementInput('THEN').setCheck(null).appendField('Dann');
+      this.appendStatementInput('ELSE').setCheck(null).appendField('Sonst');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_spawn_item = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Spawn Item in')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.items, 'item_id')), 'ID')
+        .appendField('Menge')
+        .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_spawn_enemy = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Spawn Gegner in')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.enemies, 'enemy_id')), 'ID')
+        .appendField('Anzahl')
+        .appendField(new Blockly.FieldNumber(1, 1), 'QTY');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_spawn_npc = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('Spawn/Move NPC')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField('nach Raum')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_npc_move = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('NPC bewegen')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField('nach')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'ROOM');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+    },
+  };
+
+  Blockly.Blocks.event_npc_move_if_present = {
+    init() {
+      this.setStyle('event_blocks');
+      this.appendDummyInput()
+        .appendField('NPC bewegen, wenn in')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'FROM')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.npcs, 'npc_id')), 'ID')
+        .appendField('nach')
+        .appendField(new Blockly.FieldDropdown(() => dropdownOptions(blockOptions.rooms, 'room_id')), 'TO');
       this.setPreviousStatement(true);
       this.setNextStatement(true);
     },
@@ -227,6 +371,44 @@ function blockToEvent(block) {
         then: connectionToEvents(block.getInput('THEN').connection),
         else: connectionToEvents(block.getInput('ELSE').connection),
       };
+    case 'event_counter_add':
+      return { type: 'counter_add', key: block.getFieldValue('KEY') || '', amount: Number(block.getFieldValue('AMOUNT')) || 1 };
+    case 'event_counter_set':
+      return { type: 'counter_set', key: block.getFieldValue('KEY') || '', value: Number(block.getFieldValue('VALUE')) || 0 };
+    case 'event_counter_if':
+      return {
+        type: 'counter_if',
+        key: block.getFieldValue('KEY') || '',
+        op: block.getFieldValue('OP') || '==',
+        value: Number(block.getFieldValue('VALUE')) || 0,
+        then: connectionToEvents(block.getInput('THEN').connection),
+        else: connectionToEvents(block.getInput('ELSE').connection),
+      };
+    case 'event_spawn_item':
+      return {
+        type: 'spawn_item',
+        room: block.getFieldValue('ROOM') || '',
+        id: block.getFieldValue('ID') || '',
+        qty: Number(block.getFieldValue('QTY')) || 1,
+      };
+    case 'event_spawn_enemy':
+      return {
+        type: 'spawn_enemy',
+        room: block.getFieldValue('ROOM') || '',
+        id: block.getFieldValue('ID') || '',
+        qty: Number(block.getFieldValue('QTY')) || 1,
+      };
+    case 'event_spawn_npc':
+      return { type: 'spawn_npc', id: block.getFieldValue('ID') || '', room: block.getFieldValue('ROOM') || '' };
+    case 'event_npc_move':
+      return { type: 'npc_move', id: block.getFieldValue('ID') || '', to: block.getFieldValue('ROOM') || '' };
+    case 'event_npc_move_if_present':
+      return {
+        type: 'npc_move_if_present',
+        id: block.getFieldValue('ID') || '',
+        from: block.getFieldValue('FROM') || '',
+        to: block.getFieldValue('TO') || ''
+      };
     default:
       return null;
   }
@@ -300,6 +482,55 @@ function buildBlockForEvent(event, workspace) {
       if (elseChain.start) block.getInput('ELSE').connection.connect(elseChain.start.previousConnection);
       break;
     }
+    case 'counter_add':
+      block = workspace.newBlock('event_counter_add');
+      block.setFieldValue(event.key || '', 'KEY');
+      block.setFieldValue(String(event.amount || 1), 'AMOUNT');
+      break;
+    case 'counter_set':
+      block = workspace.newBlock('event_counter_set');
+      block.setFieldValue(event.key || '', 'KEY');
+      block.setFieldValue(String(event.value || 0), 'VALUE');
+      break;
+    case 'counter_if': {
+      block = workspace.newBlock('event_counter_if');
+      block.setFieldValue(event.key || '', 'KEY');
+      block.setFieldValue(event.op || '==', 'OP');
+      block.setFieldValue(String(event.value || 0), 'VALUE');
+      const thenChain = buildChain(event.then || [], workspace);
+      if (thenChain.start) block.getInput('THEN').connection.connect(thenChain.start.previousConnection);
+      const elseChain = buildChain(event.else || [], workspace);
+      if (elseChain.start) block.getInput('ELSE').connection.connect(elseChain.start.previousConnection);
+      break;
+    }
+    case 'spawn_item':
+      block = workspace.newBlock('event_spawn_item');
+      block.setFieldValue(event.room || '', 'ROOM');
+      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(String(event.qty || 1), 'QTY');
+      break;
+    case 'spawn_enemy':
+      block = workspace.newBlock('event_spawn_enemy');
+      block.setFieldValue(event.room || '', 'ROOM');
+      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(String(event.qty || 1), 'QTY');
+      break;
+    case 'spawn_npc':
+      block = workspace.newBlock('event_spawn_npc');
+      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(event.room || '', 'ROOM');
+      break;
+    case 'npc_move':
+      block = workspace.newBlock('event_npc_move');
+      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(event.to || '', 'ROOM');
+      break;
+    case 'npc_move_if_present':
+      block = workspace.newBlock('event_npc_move_if_present');
+      block.setFieldValue(event.from || '', 'FROM');
+      block.setFieldValue(event.id || '', 'ID');
+      block.setFieldValue(event.to || '', 'TO');
+      break;
     default:
       return null;
   }
@@ -336,8 +567,8 @@ function normalizeEventsInput(value) {
   return [];
 }
 
-export function initEventBlockEditor(domElement, initialJsonArray = []) {
-  registerBlocks();
+export function initEventBlockEditor(domElement, initialJsonArray = [], options = {}) {
+  registerBlocks(options);
   const workspace = Blockly.inject(domElement, {
     toolbox: {
       kind: 'flyoutToolbox',
@@ -352,6 +583,14 @@ export function initEventBlockEditor(domElement, initialJsonArray = []) {
         { kind: 'block', type: 'event_transition' },
         { kind: 'block', type: 'event_trigger_fight' },
         { kind: 'block', type: 'event_flag_if' },
+        { kind: 'block', type: 'event_counter_add' },
+        { kind: 'block', type: 'event_counter_set' },
+        { kind: 'block', type: 'event_counter_if' },
+        { kind: 'block', type: 'event_spawn_item' },
+        { kind: 'block', type: 'event_spawn_enemy' },
+        { kind: 'block', type: 'event_spawn_npc' },
+        { kind: 'block', type: 'event_npc_move' },
+        { kind: 'block', type: 'event_npc_move_if_present' },
       ],
     },
     scrollbars: true,

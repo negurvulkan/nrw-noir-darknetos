@@ -1,0 +1,12 @@
+{
+  "id": "street",
+  "title": "Straße im Neonregen",
+  "description": "Draußen trommelt Regen auf alte Hologrammtafeln. Eine Gasse führt zurück ins Labor.",
+  "exits": { "west": "lab" },
+  "objects": [],
+  "items": [],
+  "enemies": [],
+  "npcs": [],
+  "on_enter": [],
+  "on_first_enter": []
+}

@@ -1,5 +1,7 @@
 # NRW Noir DarknetOS
 
+Version 1.3.0
+
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
 ## Start
@@ -16,6 +18,14 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - `/content/` – JSON-Content für Terminalbefehle (`index.json`, `motd.json`, etc.).
 - `/adventurebuilder/` – UI-Assets & Blockly-Glue für den Adventure Builder.
 - `/content-builder/` – PHP-Backend & JSON-Builder/API.
+
+## Neu in 1.3.0
+
+- Adventure-Counter (automatisch pro Raum-Eintritt, manuell per Events nutzbar) inklusive `counter_add`, `counter_set` und `counter_if`.
+- Dynamische Spawns für Items/Enemies/NPCs pro Raum und neue Events `spawn_item`, `spawn_enemy`, `spawn_npc`.
+- NPC-Laufwege via `npc_move` und `npc_move_if_present`; NPC-Positionen werden im Savegame mitgespeichert.
+- Adventure Builder: neue Blockly-Blöcke mit Dropdowns für Räume/Items/Gegner/NPCs für die oben genannten Events.
+- Beispiel im Default-Adventure: das Labor (`lab`) zählt Besuche, spawnt beim dritten Eintritt den `rattenkoenig` und schickt NPC Mika beim ersten Betreten auf die Straße.
 
 ## Adventure & Saves
 

@@ -1,0 +1,29 @@
+{
+  "id": "lab",
+  "title": "Versiegeltes Labor",
+  "description": "Kalte Neonröhren flackern, Kabel hängen von der Decke. Auf dem Boden liegen verstreute Notizen und verkohlte Bauteile.",
+  "exits": { "west": "flur", "ost": "street" },
+  "objects": [],
+  "items": [],
+  "enemies": [],
+  "npcs": ["mika"],
+  "on_enter": [
+    { "type": "message", "text": "Der Geruch von Ozon und Metall brennt in deiner Nase." },
+    { "type": "spawn_item", "room": "lab", "id": "kristall_fragment", "qty": 1 },
+    {
+      "type": "counter_if",
+      "key": "enter:lab",
+      "op": ">=",
+      "value": 3,
+      "then": [
+        { "type": "spawn_enemy", "room": "lab", "id": "rattenkoenig", "qty": 1 },
+        { "type": "message", "text": "Ein Rattenkönig kriecht aus den Schatten hervor!" }
+      ],
+      "else": []
+    }
+  ],
+  "on_first_enter": [
+    { "type": "message", "text": "Mika späht hinter die Trümmer und macht sich bereit wegzulaufen." },
+    { "type": "npc_move", "id": "mika", "to": "street" }
+  ]
+}

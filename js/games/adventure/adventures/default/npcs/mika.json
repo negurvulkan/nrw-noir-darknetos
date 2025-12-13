@@ -1,0 +1,10 @@
+{
+  "id": "mika",
+  "name": "Mika",
+  "description": "Eine erschöpfte Technikerin mit schmutzigem Overall und einem provisorischen Funkgerät.",
+  "room": "lab",
+  "dialog_start": "start",
+  "flags": {
+    "vertrauen": false
+  }
+}

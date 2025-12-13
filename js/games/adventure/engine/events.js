@@ -45,6 +45,47 @@ async function handleEvent(event, state, ctx) {
       }
       break;
     }
+    case 'counter_add': {
+      const amount = Number.isFinite(event.amount) ? event.amount : 1;
+      if (ctx?.addCounter) {
+        ctx.addCounter(event.key, amount);
+      } else {
+        state.counters = state.counters || {};
+        state.counters[event.key] = (state.counters[event.key] || 0) + amount;
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'counter_set': {
+      const value = Number.isFinite(event.value) ? event.value : 0;
+      if (ctx?.setCounter) {
+        ctx.setCounter(event.key, value);
+      } else {
+        state.counters = state.counters || {};
+        state.counters[event.key] = value;
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'counter_if': {
+      const ops = {
+        '==': (a, b) => a === b,
+        '!=': (a, b) => a !== b,
+        '<': (a, b) => a < b,
+        '<=': (a, b) => a <= b,
+        '>': (a, b) => a > b,
+        '>=': (a, b) => a >= b
+      };
+      const op = event.op && ops[event.op] ? event.op : '==';
+      const current = ctx?.getCounter ? ctx.getCounter(event.key) : (state.counters?.[event.key] || 0);
+      const target = Number.isFinite(event.value) ? event.value : 0;
+      const matches = ops[op](current, target);
+      const chain = matches ? event.then : event.else;
+      if (Array.isArray(chain)) {
+        await runEvents(chain, state, ctx);
+      }
+      break;
+    }
     case 'add_item': {
       const qty = normalizeQty(event.qty);
       const added = ctx?.addToInventory ? await ctx.addToInventory(event.id, qty) : 0;
@@ -90,6 +131,52 @@ async function handleEvent(event, state, ctx) {
     case 'trigger_fight':
       await ctx.startCombat(event.enemy);
       break;
+    case 'spawn_item': {
+      const qty = normalizeQty(event.qty);
+      if (ctx?.spawnItem) {
+        ctx.spawnItem(event.room || state.location, event.id, qty);
+      } else {
+        state.roomSpawns = state.roomSpawns || {};
+        const roomId = event.room || state.location;
+        state.roomSpawns[roomId] = state.roomSpawns[roomId] || { items: [], enemies: [], npcs: [] };
+        state.roomSpawns[roomId].items.push({ id: event.id, qty });
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'spawn_enemy': {
+      const qty = normalizeQty(event.qty);
+      if (ctx?.spawnEnemy) {
+        ctx.spawnEnemy(event.room || state.location, event.id, qty);
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'spawn_npc': {
+      if (ctx?.spawnNpc) {
+        ctx.spawnNpc(event.room || state.location, event.id);
+      } else {
+        state.npcs = state.npcs || {};
+        state.npcs[event.id] = { room: event.room || state.location, flags: {}, counters: {} };
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'npc_move': {
+      if (ctx?.moveNpc) {
+        ctx.moveNpc(event.id, event.to);
+      }
+      ctx?.saveState?.();
+      break;
+    }
+    case 'npc_move_if_present': {
+      const inRoom = ctx?.npcIsInRoom ? ctx.npcIsInRoom(event.id, event.from) : false;
+      if (inRoom && ctx?.moveNpc) {
+        ctx.moveNpc(event.id, event.to);
+        ctx?.saveState?.();
+      }
+      break;
+    }
     case 'start_dialog':
       if (ctx.startDialog) {
         await ctx.startDialog(event.npc, event.node);
