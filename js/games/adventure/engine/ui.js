@@ -58,7 +58,8 @@ export function renderStatus(state) {
     const enemyHp = Math.max(state.enemy.stats?.hp ?? 0, 0);
     const enemyDef = state.enemy.stats?.defense ?? '-';
     const enemyAtk = state.enemy.stats?.attack ?? '-';
-    status += `  | Gegner: ${state.enemy.name} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
+    const enemyLabel = state.enemy.name || state.enemy.id || 'Gegner';
+    status += `  | Gegner: ${enemyLabel} (${enemyHp} HP, ⚔ ${enemyAtk} 🛡 ${enemyDef})`;
   }
 
   advStatusEl.textContent = status;
