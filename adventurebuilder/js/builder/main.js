@@ -790,6 +790,23 @@ function renderItemEditor() {
     field('ID', 'text', item.id, (v) => updateItem(item, 'id', v)),
     field('Name', 'text', item.name, (v) => updateItem(item, 'name', v)),
     field('Aufhebbar', 'checkbox', item.pickup !== false, (v) => updateItem(item, 'pickup', v)),
+    field('Stackable', 'checkbox', item.stackable === true, (v) => updateItem(item, 'stackable', v)),
+    field('Max Stack', 'number', item.maxStack ?? '', (v) => {
+      const num = Number(v);
+      if (Number.isFinite(num) && num > 0) updateItem(item, 'maxStack', num);
+      else {
+        delete item.maxStack;
+        setDirty(true);
+      }
+    }),
+    field('Einheit', 'text', item.unit || '', (v) => {
+      const next = (v || '').trim();
+      if (next) updateItem(item, 'unit', next);
+      else {
+        delete item.unit;
+        setDirty(true);
+      }
+    }),
   ]));
 
   const desc = document.createElement('div');

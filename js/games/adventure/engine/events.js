@@ -4,6 +4,17 @@
 import { loadAscii } from './loader.js';
 import { advLog } from './ui.js';
 
+function normalizeQty(qty) {
+  const val = Number(qty);
+  return Number.isFinite(val) && val > 0 ? val : 1;
+}
+
+function formatItemLabel(item, qty = 1) {
+  const name = item?.name || item?.id || 'Item';
+  const unit = item?.unit ? ` ${item.unit}` : '';
+  return item?.stackable || qty > 1 ? `${name} x${qty}${unit}` : name;
+}
+
 export async function runEvents(events = [], state, ctx) {
   for (const event of events) {
     if (ctx?.logDebugEvent) {
@@ -34,20 +45,27 @@ async function handleEvent(event, state, ctx) {
       }
       break;
     }
-    case 'add_item':
-      if (!state.inventory.includes(event.id)) {
-        state.inventory.push(event.id);
-        advLog([`${event.id} erhalten.`]);
+    case 'add_item': {
+      const qty = normalizeQty(event.qty);
+      const added = ctx?.addToInventory ? await ctx.addToInventory(event.id, qty) : 0;
+      if (added > 0) {
+        const item = ctx?.loadItem ? await ctx.loadItem(event.id) : { id: event.id };
+        const total = ctx?.getInvQty ? ctx.getInvQty(event.id) : qty;
+        advLog([`${formatItemLabel(item, total)} erhalten.`]);
       }
-      ctx.saveState();
+      ctx?.saveState?.();
       break;
+    }
     case 'remove_item': {
-      const idx = state.inventory.indexOf(event.id);
-      if (idx !== -1) {
-        state.inventory.splice(idx, 1);
-        advLog([`${event.id} entfernt.`]);
+      const qty = normalizeQty(event.qty);
+      const removed = ctx?.removeFromInventory ? ctx.removeFromInventory(event.id, qty) : 0;
+      if (removed > 0) {
+        const item = ctx?.loadItem ? await ctx.loadItem(event.id) : { id: event.id };
+        const remaining = ctx?.getInvQty ? ctx.getInvQty(event.id) : 0;
+        const label = remaining > 0 ? formatItemLabel(item, remaining) : (item.name || item.id || event.id);
+        advLog([`${label} entfernt.`]);
       }
-      ctx.saveState();
+      ctx?.saveState?.();
       break;
     }
     case 'unlock_exit': {
