@@ -21,6 +21,7 @@ const DEBUG_LOG_LIMIT = 200;
 let debugLogging = false;
 const debugLogEntries = [];
 
+let injectedAdventureIndex = null;
 let recipeIndex = [];
 let recipeKeyIndex = new Map();
 
@@ -527,6 +528,12 @@ function resetAdventureData(id) {
 }
 
 async function loadAdventureIndex() {
+  // 1) Wenn von außen gesetzt: direkt nutzen
+  if (Array.isArray(injectedAdventureIndex) && injectedAdventureIndex.length) {
+    return injectedAdventureIndex;
+  }
+
+  // 2) Fallback: klassisch via fetch(ADVENTURE_INDEX)
   const res = await fetch(ADVENTURE_INDEX);
   if (!res.ok) {
     throw new Error('Adventure-Index konnte nicht geladen werden.');
@@ -1331,6 +1338,9 @@ function printHelp() {
 }
 
 export const adventure = {
+	setAdventureIndex(list) {
+	  injectedAdventureIndex = Array.isArray(list) ? list : null;
+	},
   async loadAdventure(adventureId) {
     await ensureAdventure(adventureId);
     return getCurrentAdventure();
@@ -1434,5 +1444,6 @@ export const adventure = {
     printLines(['Du verlässt das Adventure und kehrst ins Darknetz-Terminal zurück.', ''], 'dim');
   }
 };
+
 
 export default adventure;
