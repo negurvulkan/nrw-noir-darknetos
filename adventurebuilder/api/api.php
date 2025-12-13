@@ -89,8 +89,19 @@ function loadAdventure($id)
     $rooms = readJsonDirectory($dir . '/rooms');
     $items = readJsonDirectory($dir . '/items');
     $objects = readJsonDirectory($dir . '/objects');
-    $enemies = readJsonDirectory($dir . '/enemies');
-    $npcs = readJsonDirectory($dir . '/npcs');
+    $actors = readJsonDirectory($dir . '/actors');
+    if (empty($actors)) {
+        $enemies = readJsonDirectory($dir . '/enemies');
+        $npcs = readJsonDirectory($dir . '/npcs');
+        foreach ($enemies as $enemy) {
+            $enemy['type'] = 'enemy';
+            $actors[] = $enemy;
+        }
+        foreach ($npcs as $npc) {
+            $npc['type'] = 'npc';
+            $actors[] = $npc;
+        }
+    }
     $dialogs = readDialogDirectory($dir . '/dialogs');
     $asciiFiles = listFiles($dir . '/ascii');
 
@@ -102,8 +113,7 @@ function loadAdventure($id)
             'rooms' => $rooms,
             'items' => $items,
             'objects' => $objects,
-            'enemies' => $enemies,
-            'npcs' => $npcs,
+            'actors' => $actors,
             'dialogs' => $dialogs,
         ],
         'ascii' => $asciiFiles,
@@ -121,8 +131,7 @@ function saveAdventure($id, $payload)
     persistCollection($dir . '/rooms', $payload['rooms'] ?? [], 'rooms');
     persistCollection($dir . '/items', $payload['items'] ?? [], 'items');
     persistCollection($dir . '/objects', $payload['objects'] ?? [], 'objects');
-    persistCollection($dir . '/enemies', $payload['enemies'] ?? [], 'enemies');
-    persistCollection($dir . '/npcs', $payload['npcs'] ?? [], 'npcs');
+    persistCollection($dir . '/actors', $payload['actors'] ?? [], 'actors');
     persistDialogs($dir . '/dialogs', $payload['dialogs'] ?? []);
 
     return ['status' => 'ok'];
@@ -184,8 +193,7 @@ function createAdventure($payload)
     @mkdir($dir . '/rooms', 0777, true);
     @mkdir($dir . '/items', 0777, true);
     @mkdir($dir . '/objects', 0777, true);
-    @mkdir($dir . '/enemies', 0777, true);
-    @mkdir($dir . '/npcs', 0777, true);
+    @mkdir($dir . '/actors', 0777, true);
     @mkdir($dir . '/dialogs', 0777, true);
     @mkdir($dir . '/ascii', 0777, true);
 
@@ -227,8 +235,22 @@ function copyAdventure($sourceId, $targetId)
     copyDirectory($sourceDir . '/rooms', $targetDir . '/rooms');
     copyDirectory($sourceDir . '/items', $targetDir . '/items');
     copyDirectory($sourceDir . '/objects', $targetDir . '/objects');
-    copyDirectory($sourceDir . '/enemies', $targetDir . '/enemies');
-    copyDirectory($sourceDir . '/npcs', $targetDir . '/npcs');
+    if (is_dir($sourceDir . '/actors')) {
+        copyDirectory($sourceDir . '/actors', $targetDir . '/actors');
+    } else {
+        $actors = [];
+        foreach (readJsonDirectory($sourceDir . '/enemies') as $enemy) {
+            $enemy['type'] = 'enemy';
+            $actors[] = $enemy;
+        }
+        foreach (readJsonDirectory($sourceDir . '/npcs') as $npc) {
+            $npc['type'] = 'npc';
+            $actors[] = $npc;
+        }
+        if (!empty($actors)) {
+            persistCollection($targetDir . '/actors', $actors, 'actors');
+        }
+    }
     copyDirectory($sourceDir . '/dialogs', $targetDir . '/dialogs');
     copyDirectory($sourceDir . '/ascii', $targetDir . '/ascii');
 }
