@@ -17,12 +17,27 @@ const SEANCE_TRIGGER_RULES = [
   { key: "help",  regex: /\b(hilfe|help|bitte|retten|rettung)\b/i }
 ];
 
+const SEANCE_MEMORY_STOPWORDS = [
+  "der", "die", "das", "und", "oder", "ein", "eine", "von", "mit", "auf", "für",
+  "nicht", "den", "ist", "sind", "soll", "hast", "immer", "nach", "was", "wie",
+  "warum", "wer", "wann", "wo", "ich", "du", "wir", "ihr", "sie"
+];
+
 const SEANCE_FALLBACK_SPIRIT = {
   name: "Violet Echo",
   persona: "orakelhaft",
   seed: 12345,
   patience: 3,
   tabooWords: ["polizei", "drogen", "cop"],
+  tabooReaction: {
+    patienceDelta: -1,
+    glitchChance: 0.25,
+    templates: [
+      "Sprich diesen Namen nicht im Netz.",
+      "Das rauscht. Das ist nicht für dich.",
+      "{{user}}… hör auf."
+    ]
+  },
   triggers: {
     blood: 2,
     ash: 1,
@@ -72,6 +87,25 @@ const SEANCE_FALLBACK_SPIRIT = {
     "Ein leises Kratzen im Metall.",
     "Die Leitung wird kalt.",
     "Ein Pixel fällt aus der Realität."
+  ],
+  memory: {
+    keepLastQuestions: 3,
+    callbacks: [
+      "Du fragst immer wieder nach {{lastTopic}}.",
+      "Wir waren schon hier, {{user}}."
+    ]
+  },
+  rareEvents: [
+    {
+      id: "fallback_gate",
+      chance: 0.01,
+      requires: { whispers: 2, containsAny: ["aschespur"] },
+      lines: [
+        "Etwas altes öffnet sich.",
+        "[UNLOCK] /fallback/gate.txt"
+      ],
+      unlock: { path: "/fallback/gate.txt", command: "gate" }
+    }
   ]
 };
 
@@ -193,6 +227,67 @@ function seanceRandom(session, salt = 0) {
   return session.spirit.random / mod;
 }
 
+function seanceEnsureState(session) {
+  session.questions = Array.isArray(session.questions) ? session.questions : [];
+  session.whisperCount = Number.isFinite(session.whisperCount) ? session.whisperCount : 0;
+  session.triggeredRareEvents = session.triggeredRareEvents || {};
+  session.seenTokens = Array.isArray(session.seenTokens) ? session.seenTokens : [];
+  session.topicHistory = Array.isArray(session.topicHistory) ? session.topicHistory : [];
+  session.triggerScores = session.triggerScores || {};
+  session.unlocked = session.unlocked || {};
+}
+
+function seanceTrackTokens(session, text = "") {
+  const tokens = (text.match(/[\p{L}\d]{2,}/gu) || []).map(t => t.toLowerCase());
+  if (!tokens.length) return;
+  session.seenTokens = session.seenTokens || [];
+  tokens.forEach(tok => {
+    if (!session.seenTokens.includes(tok)) {
+      session.seenTokens.push(tok);
+    }
+  });
+}
+
+function seanceExtractTopic(question = "", triggers = {}) {
+  const tokens = (question.match(/[\p{L}]{2,}/gu) || []).map(t => t.toLowerCase());
+  const triggerKeys = Object.keys(triggers || {}).map(k => k.toLowerCase());
+  for (const tok of tokens) {
+    if (triggerKeys.includes(tok)) return tok;
+  }
+
+  const filtered = tokens
+    .filter(tok => tok.length > 4 && !SEANCE_MEMORY_STOPWORDS.includes(tok))
+    .sort((a, b) => b.length - a.length);
+  return filtered[0] || tokens[0] || "";
+}
+
+function seanceRememberQuestion(session, question = "") {
+  seanceEnsureState(session);
+  session.questions.push(question);
+  const memoryCfg = session.spirit.memory || {};
+  const keep = Math.max(1, memoryCfg.keepLastQuestions || 3);
+  if (session.questions.length > keep) {
+    session.questions = session.questions.slice(-keep);
+  }
+  const topic = seanceExtractTopic(question, session.spirit.triggers || {});
+  if (topic) {
+    session.lastTopic = topic;
+    session.topicHistory.push(topic);
+    if (session.topicHistory.length > keep * 2) {
+      session.topicHistory = session.topicHistory.slice(-keep * 2);
+    }
+  }
+  seanceTrackTokens(session, question);
+}
+
+function seanceMakeGlitchLine(session) {
+  const charset = ["▒", "░", "█", "~", "///", "...", "##"];
+  const seedWords = (session.seenTokens || []).slice(-3);
+  const randomChunk = () => seancePick(charset, session, seedWords.length).repeat(1 + Math.floor(seanceRandom(session) * 2));
+  const fragments = [randomChunk(), (seedWords[0] || "SIGNAL"), randomChunk(), (seedWords[1] || "LOST"), randomChunk()];
+  return fragments.join(" ").trim();
+}
+
 function seancePick(list = [], session, salt = 0) {
   if (!list.length) return "";
   const r = seanceRandom(session, salt);
@@ -238,23 +333,106 @@ function seanceDetectTrigger(question = "") {
   return "default";
 }
 
-function seanceRenderTemplate(template, session, { question = "", whisperText = "" } = {}) {
+function seanceCollectTriggers(session, text = "") {
+  const triggers = session.spirit.triggers || {};
+  const hits = [];
+  const lower = text.toLowerCase();
+  Object.entries(triggers).forEach(([key, value]) => {
+    if (lower.includes(String(key).toLowerCase())) {
+      const weight = Number(value) || 1;
+      hits.push({ key, weight });
+      session.triggerScores[key] = (session.triggerScores[key] || 0) + weight;
+    }
+  });
+  const top = hits.sort((a, b) => b.weight - a.weight)[0];
+  const totalScore = hits.reduce((acc, cur) => acc + cur.weight, 0);
+  if (hits.length) {
+    seanceBumpMood(session, -0.01 * hits.length);
+  }
+  return { hits, topKey: top?.key || null, totalScore };
+}
+
+function seanceApplyTriggerBias(baseKey, triggerInfo, content, session) {
+  const templates = content.templates || {};
+  if (!triggerInfo.topKey) return baseKey;
+
+  const key = triggerInfo.topKey.toLowerCase();
+  if (key === "silence") {
+    if (templates.death && seanceRandom(session, 11) < 0.5) return "death";
+    if (templates.time && seanceRandom(session, 12) < 0.35) return "time";
+  }
+  if (key === "blood" && templates.death && seanceRandom(session, 13) < 0.45) {
+    return "death";
+  }
+  if (key === "ash" && templates.time && seanceRandom(session, 14) < 0.4) {
+    return "time";
+  }
+  return baseKey;
+}
+
+async function seanceMaybeTriggerRareEvent(session, { stage = "listen", lastInput = "" } = {}) {
+  const content = await seanceLoadSpiritContent();
+  const rareEvents = content.rareEvents || [];
+  if (!rareEvents.length) return false;
+  seanceEnsureState(session);
+
+  let triggered = false;
+  for (const rare of rareEvents) {
+    if (!rare || !rare.id || session.triggeredRareEvents[rare.id]) continue;
+    const requires = rare.requires || {};
+    if (typeof requires.whispers === "number" && (session.whisperCount || 0) < requires.whispers) {
+      continue;
+    }
+
+    if (Array.isArray(requires.containsAny) && requires.containsAny.length) {
+      const seen = (session.seenTokens || []).map(t => t.toLowerCase());
+      const anyHit = requires.containsAny.some(word => seen.includes(String(word).toLowerCase()));
+      if (!anyHit) continue;
+    }
+
+    const chance = typeof rare.chance === "number" ? rare.chance : 0;
+    if (seanceRandom(session, rare.id.length + stage.length) >= chance) continue;
+
+    const lines = rare.lines || [];
+    lines.forEach(line => {
+      const rendered = seanceRenderTemplate(line, { ...session, spirit: { ...session.spirit, words: content.words || session.spirit.words } }, { question: lastInput, whisperText: lastInput });
+      seanceAddLog(session, "system", rendered);
+      printLines([rendered], "seance-system");
+    });
+
+    if (rare.unlock && rare.unlock.path) {
+      session.unlocked[rare.unlock.path] = rare.unlock;
+    }
+
+    session.triggeredRareEvents[rare.id] = true;
+    triggered = true;
+  }
+
+  if (triggered) seanceSaveSession(session);
+  return triggered;
+}
+
+function seanceRenderTemplate(template = "", session, { question = "", whisperText = "" } = {}) {
   const now = new Date();
   const ctx = {
     user: getUserName(),
-    time: now.toLocaleTimeString(),
+    time: `${seancePad(now.getHours())}:${seancePad(now.getMinutes())}`,
     mood: session.mood,
     question,
     whisper: whisperText || "",
+    lastTopic: session.lastTopic || "",
+    session: session.id || "",
   };
 
-  return template.replace(/\{\{(.*?)\}\}/g, (_, keyRaw) => {
+  return String(template).replace(/\{\{(.*?)\}\}/g, (_, keyRaw) => {
     const key = keyRaw.trim();
-    if (ctx[key]) return ctx[key];
-    const spirit = session.spirit;
+    if (Object.prototype.hasOwnProperty.call(ctx, key) && ctx[key] !== undefined && ctx[key] !== null) {
+      return String(ctx[key]);
+    }
+    const spirit = session.spirit || {};
     const words = spirit.words || {};
     if (Array.isArray(words[key])) {
-      return seancePick(words[key], session, key.length);
+      return seancePick(words[key], session, key.length + question.length + whisperText.length);
     }
     return "";
   });
@@ -280,24 +458,62 @@ function seanceBumpMood(session, delta) {
 }
 
 async function seanceBuildSpiritReply(session, question = "", { whisperText = "" } = {}) {
+  seanceEnsureState(session);
   const spirit = session.spirit;
   const content = await seanceLoadSpiritContent();
-  const triggerKey = seanceDetectTrigger(question);
-  const templates = content.templates?.[triggerKey] || content.templates?.default || SEANCE_FALLBACK_SPIRIT.templates.default;
-  const raw = seancePick(templates, session, question.length + whisperText.length);
+  const combinedSpirit = {
+    ...spirit,
+    words: content.words || spirit.words,
+    memory: content.memory || spirit.memory,
+    tabooReaction: content.tabooReaction || spirit.tabooReaction,
+    triggers: content.triggers || spirit.triggers
+  };
+  session.spirit.triggers = combinedSpirit.triggers;
+  session.spirit.memory = combinedSpirit.memory;
+  session.spirit.tabooReaction = combinedSpirit.tabooReaction;
 
-  const tabooHit = (content.tabooWords || spirit.tabooWords || []).some(word =>
-    word && question.toLowerCase().includes(String(word).toLowerCase())
-  );
+  const fullInput = `${question} ${whisperText}`.trim().toLowerCase();
+  const tabooWords = (content.tabooWords || combinedSpirit.tabooWords || []).map(w => String(w).toLowerCase());
+  const tabooHit = tabooWords.some(word => word && fullInput.includes(word));
+
+  if (tabooHit && combinedSpirit.tabooReaction && Array.isArray(combinedSpirit.tabooReaction.templates)) {
+    if (combinedSpirit.tabooReaction.patienceDelta) {
+      seanceAdjustPatience(session, combinedSpirit.tabooReaction.patienceDelta);
+    }
+    const reactionLine = seancePick(combinedSpirit.tabooReaction.templates, session, question.length + whisperText.length);
+    const lines = [
+      seanceRenderTemplate(reactionLine, { ...session, spirit: combinedSpirit }, { question, whisperText })
+    ];
+    const glitchChance = typeof combinedSpirit.tabooReaction.glitchChance === "number" ? combinedSpirit.tabooReaction.glitchChance : 0;
+    if (seanceRandom(session, -5) < glitchChance) {
+      lines.push(seanceMakeGlitchLine(session));
+    }
+    return seanceDistort(lines.join("\n"), session.spirit.patience || 0);
+  } else if (tabooHit) {
+    seanceAdjustPatience(session, -1);
+  }
+
+  const triggerInfo = seanceCollectTriggers(session, `${question} ${whisperText}`);
+  let triggerKey = seanceDetectTrigger(question);
+  triggerKey = seanceApplyTriggerBias(triggerKey, triggerInfo, content, session);
+
+  const templates = content.templates?.[triggerKey] || content.templates?.default || SEANCE_FALLBACK_SPIRIT.templates.default;
+  let raw = seancePick(templates, session, question.length + whisperText.length + (triggerInfo.totalScore || 0));
+
+  const memoryCfg = combinedSpirit.memory;
+  const useMemory = memoryCfg && Array.isArray(memoryCfg.callbacks) && memoryCfg.callbacks.length && session.lastTopic && (seanceRandom(session, 9) < 0.2);
+  if (useMemory) {
+    raw = seancePick(memoryCfg.callbacks, session, session.lastTopic.length);
+  }
 
   let text = seanceRenderTemplate(raw, {
     ...session,
-    spirit: { ...spirit, words: content.words || spirit.words }
+    spirit: combinedSpirit
   }, { question, whisperText });
 
-  if (tabooHit) {
-    text += " (Das hättest du nicht sagen sollen.)";
-    seanceAdjustPatience(session, -1);
+  if (triggerInfo.topKey === "silence" && content.events && content.events.length && seanceRandom(session, 6) < 0.5) {
+    const eventText = seancePick(content.events, session, 5);
+    seanceAddLog(session, "event", eventText);
   }
 
   text = seanceDistort(text, spirit.patience || 0);
@@ -349,6 +565,7 @@ function seancePrintStatus(session) {
   const spirit = session.spirit || {};
   const participants = Array.isArray(session.participants) ? session.participants : [];
   const last = session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleTimeString() : "unbekannt";
+  const unlocks = session.unlocked ? Object.keys(session.unlocked) : [];
 
   lines.push(`Séance ${session.id}:`);
   lines.push(`  Modus: ${session.mode} | Phase: ${session.phase}`);
@@ -356,6 +573,9 @@ function seancePrintStatus(session) {
   lines.push(`  Stimmung: ${session.mood?.toFixed(2) || "?"} | Geduld: ${spirit.patience ?? "?"}`);
   lines.push(`  Teilnehmer: ${participants.join(", ") || "niemand"}`);
   lines.push(`  Letzte Aktivität: ${last}`);
+  if (unlocks.length) {
+    lines.push(`  Unlocks: ${unlocks.join(", ")}`);
+  }
   if (session.muted?.length) {
     lines.push(`  Stummgeschaltet: ${session.muted.join(", ")}`);
   }
@@ -400,14 +620,23 @@ async function seanceStartCommand(args = []) {
     log: [],
     aliases: {},
     muted: [],
+    questions: [],
+    whisperCount: 0,
+    triggeredRareEvents: {},
+    seenTokens: [],
+    topicHistory: [],
+    triggerScores: {},
+    unlocked: {},
     spirit: {
       name: spiritContent.name || "Geist",
       persona: spiritContent.persona || "schattenhaft",
       seed: spiritContent.seed || Math.floor(Math.random() * 1000000),
       patience: spiritContent.patience ?? 3,
       tabooWords: spiritContent.tabooWords || [],
+      tabooReaction: spiritContent.tabooReaction || {},
       triggers: spiritContent.triggers || {},
-      words: spiritContent.words || {}
+      words: spiritContent.words || {},
+      memory: spiritContent.memory || {}
     }
   };
 
@@ -431,6 +660,7 @@ function seanceEnsureActive() {
     printLines(["Keine aktive Séance. Starte eine mit 'seance start'.", ""], "error");
     return null;
   }
+  seanceEnsureState(session);
   return session;
 }
 
@@ -450,6 +680,7 @@ async function seanceAskCommand(args = []) {
   }
 
   seanceAddLog(session, "ask", question, { author: getUserName() });
+  seanceRememberQuestion(session, question);
   session.phase = session.phase === "opening" ? "active" : session.phase;
 
   const lastAsk = session.lastAskAt || 0;
@@ -463,6 +694,8 @@ async function seanceAskCommand(args = []) {
 
   const reply = await seanceBuildSpiritReply(session, question);
   seanceAddLog(session, "spirit", reply, { author: session.spirit.name });
+
+  await seanceMaybeTriggerRareEvent(session, { stage: "ask", lastInput: question });
 
   if (session.spirit.patience <= 0) {
     session.spirit.cooldownUntil = seanceNow() + 1000 * (10 + Math.floor(seanceRandom(session) * 20));
@@ -503,6 +736,8 @@ async function seanceListenCommand() {
     printLines([rendered.text], rendered.cls);
   }
 
+  await seanceMaybeTriggerRareEvent(session, { stage: "listen" });
+
   if (seanceRandom(session) < 0.08) {
     seanceAddLog(session, "system", "⚠ GATE OPEN – etwas klirrt im Untergrund.");
     printLines(["⚠ GATE OPEN – etwas klirrt im Untergrund.", ""], "success");
@@ -534,6 +769,8 @@ async function seanceWhisperCommand(args = []) {
   }
 
   const alias = seanceAlias(session, user);
+  session.whisperCount = (session.whisperCount || 0) + 1;
+  seanceTrackTokens(session, text);
   seanceAddLog(session, "whisper", text, { author: user, meta: { alias } });
   seanceBumpMood(session, 0.02);
 
@@ -589,6 +826,8 @@ function seanceJoinCommand(args = []) {
     ], "error");
     return;
   }
+
+  seanceEnsureState(session);
 
   const user = getUserName();
   if (!session.participants.includes(user)) {

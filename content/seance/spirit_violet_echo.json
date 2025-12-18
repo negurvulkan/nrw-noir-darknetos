@@ -4,6 +4,15 @@
   "seed": 23457,
   "patience": 3,
   "tabooWords": ["polizei", "drogen", "verrat", "verratet"],
+  "tabooReaction": {
+    "patienceDelta": -1,
+    "glitchChance": 0.35,
+    "templates": [
+      "Sprich diesen Namen nicht im Netz.",
+      "Das rauscht. Das ist nicht für dich.",
+      "{{user}}… hör auf."
+    ]
+  },
   "triggers": {
     "blood": 2,
     "ash": 1,
@@ -51,11 +60,30 @@
     "omen": ["Asche", "Kälte", "Violett", "Stille", "Rabenfedern", "Ozon", "blinde Spiegel"],
     "noun": ["ein Zeichen", "eine Tür", "deinen Schatten", "ein Echo", "ein Kabel", "einen Riss"]
   },
+  "memory": {
+    "keepLastQuestions": 3,
+    "callbacks": [
+      "Du fragst immer wieder nach {{lastTopic}}.",
+      "Wir waren schon hier, {{user}}."
+    ]
+  },
   "events": [
     "Kerzenflackern registriert.",
     "Ein leises Kratzen im Metall.",
     "Die Leitung wird kalt.",
     "Ein Pixel fällt aus der Realität.",
     "Stimmen rauschen von weit her."
+  ],
+  "rareEvents": [
+    {
+      "id": "gate_open_1",
+      "chance": 0.03,
+      "requires": { "whispers": 3, "containsAny": ["blood", "ash", "silence"] },
+      "lines": [
+        "Drei Zeichen. Das Netz erinnert sich.",
+        "[UNLOCK] /deep/echo/gate.txt"
+      ],
+      "unlock": { "path": "/deep/echo/gate.txt", "command": "gate" }
+    }
   ]
 }
