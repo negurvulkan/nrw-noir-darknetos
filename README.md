@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.4.0
+Version 1.5.0
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -19,6 +19,10 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - `/content/` – JSON-Content für Terminalbefehle (`index.json`, `motd.json`, etc.).
 - `/adventurebuilder/` – UI-Assets & Blockly-Glue für den Adventure Builder.
 - `/content-builder/` – PHP-Backend & JSON-Builder/API.
+
+## Neu in 1.5.0
+
+- TicTacToe hat jetzt einen Online-Multiplayer im Terminal: `ttt online host` erstellt eine Lobby, `ttt online join <CODE>` tritt bei; Spielzustand läuft über `/content-builder/api/ttt-multiplayer.php`.
 
 ## Neu in 1.4.0
 
