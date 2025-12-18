@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.6.0
+Version 1.6.1
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -23,6 +23,10 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 ## Neu in 1.6.0
 
 - Terminal-Chat als Modul mit Präsenz-Anzeige (`chat online`) und privatem Messaging (`chat send <user> <msg>`, `chat inbox`).
+
+## Neu in 1.6.1
+
+- Chat nutzt jetzt einen Online-Backbone (`/content-builder/api/chat.php`) für Präsenz und Nachrichten zwischen Browsern; fällt bei fehlender Verbindung automatisch auf den lokalen Modus zurück.
 
 ## Neu in 1.5.0
 
@@ -53,6 +57,7 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - Terminal: `/`
 - Adventure Builder: `/adventurebuilder/`
 - Content Builder/API: `/content-builder/`
+- Darknet-Chat Backend: `/content-builder/api/chat.php`
 
 ## AI Assist (optional)
 
