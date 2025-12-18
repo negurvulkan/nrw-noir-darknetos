@@ -295,21 +295,21 @@ async function handleCommand(raw) {
   const args  = parts.slice(1);
   const arg   = args[0] || "";
 
-	// ---------------------------------------------------------
-	  // Wenn Adventure aktiv ist: Eingaben dorthin routen
-	  // (außer 'adv', damit das Meta-Command nutzbar bleibt)
-	  // ---------------------------------------------------------
-	  if (
-		base !== "adv" &&
-		typeof window !== "undefined" &&
-		window.darknetAdventure &&
-		typeof window.darknetAdventure.isActive === "function" &&
-		window.darknetAdventure.isActive() &&
-		typeof window.darknetAdventure.handleInput === "function"
-	  ) {
-		await window.darknetAdventure.handleInput(cmd);
-		return;
-	  }
+  // ---------------------------------------------------------
+  // Wenn Adventure aktiv ist: Eingaben dorthin routen
+  // (außer 'adv' oder 'chat', damit Meta-Commands nutzbar bleiben)
+  // ---------------------------------------------------------
+  const adventureIsActive =
+    typeof window !== "undefined" &&
+    window.darknetAdventure &&
+    typeof window.darknetAdventure.isActive === "function" &&
+    window.darknetAdventure.isActive() &&
+    typeof window.darknetAdventure.handleInput === "function";
+
+  if (adventureIsActive && base !== "adv" && base !== "chat") {
+    await window.darknetAdventure.handleInput(cmd);
+    return;
+  }
 
   // ---------------------------------------------------------
   // Externe Commands (z. B. Adventure)
@@ -375,6 +375,7 @@ async function handleCommand(raw) {
       "  tree [pfad]       - Verzeichnisbaum anzeigen",
       "  stat <pfad>       - Metadaten zu Datei/Verzeichnis",
       "  scan              - Schattennetz scannen",
+      "  chat              - Chat-Befehle (help/online/send/inbox)",
       "  game / games      - Game Hub",
       "",
       "",

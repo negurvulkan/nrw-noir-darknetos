@@ -27,6 +27,7 @@ const BUILTIN_COMMANDS = [
   "tree",
   "stat",
   "scan",
+  "chat",
   "game",
   "games",
   "ttt"
