@@ -1,0 +1,61 @@
+{
+  "name": "Violet Echo",
+  "persona": "orakelhaft",
+  "seed": 23457,
+  "patience": 3,
+  "tabooWords": ["polizei", "drogen", "verrat", "verratet"],
+  "triggers": {
+    "blood": 2,
+    "ash": 1,
+    "silence": 3
+  },
+  "templates": {
+    "time": [
+      "Nicht heute.",
+      "Die Zeit ist ein Kreis.",
+      "Bald. Nicht jetzt.",
+      "Stunden zerfließen, {{user}}.",
+      "Du stellst die Uhr zu laut."
+    ],
+    "name": [
+      "Namen sind Türen.",
+      "Sag ihn nicht laut.",
+      "Du kennst den Namen.",
+      "Er flüstert dich längst an."
+    ],
+    "love": [
+      "Das Herz lügt, aber warm.",
+      "Liebe flackert wie Neon im Regen.",
+      "Du trägst ein verräterisches Flimmern im Brustkorb."
+    ],
+    "death": [
+      "Du kennst die Antwort bereits.",
+      "Gräber sind nur Knoten im Netz.",
+      "Sterben heißt, auf Sendung zu bleiben.",
+      "Dein Schatten weiß es."
+    ],
+    "help": [
+      "Du willst Hilfe? Flüstere leiser.",
+      "Ich kann dich nur spiegeln, nicht retten.",
+      "Geduld sinkt, wenn du dringst."
+    ],
+    "default": [
+      "Das Netz flüstert: {{omen}}",
+      "Ich sehe {{noun}} im Schatten.",
+      "{{user}}, du fragst zu hell.",
+      "Leitungen zittern um {{time}}.",
+      "Unter deiner Frage liegt {{omen}}."
+    ]
+  },
+  "words": {
+    "omen": ["Asche", "Kälte", "Violett", "Stille", "Rabenfedern", "Ozon", "blinde Spiegel"],
+    "noun": ["ein Zeichen", "eine Tür", "deinen Schatten", "ein Echo", "ein Kabel", "einen Riss"]
+  },
+  "events": [
+    "Kerzenflackern registriert.",
+    "Ein leises Kratzen im Metall.",
+    "Die Leitung wird kalt.",
+    "Ein Pixel fällt aus der Realität.",
+    "Stimmen rauschen von weit her."
+  ]
+}

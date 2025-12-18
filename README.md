@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.6.1
+Version 1.7.0
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -23,6 +23,10 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 ## Neu in 1.6.0
 
 - Terminal-Chat als Modul mit Präsenz-Anzeige (`chat online`) und privatem Messaging (`chat send <user> <msg>`, `chat inbox`).
+
+## Neu in 1.7.0
+
+- Neues Terminal-Minigame **Séance** (`seance ...`) mit regelbasiertem Geist „Violet Echo“: Fragen stellen (`ask`), auf Ereignisse warten (`listen`), Flüstern lesen/senden (`read`, `whisper`), Sitzungen hosten oder joinen (`start`, `invite`, `join`, `leave`, `end`) und Moderation (`mute`, `purge`). Stimmung/Patience werden pro Session getrackt; Whispers können über den Game Hub (`game seance`) oder direkt im Terminal gestartet werden.
 
 ## Neu in 1.6.1
 

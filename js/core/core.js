@@ -30,7 +30,8 @@ const BUILTIN_COMMANDS = [
   "chat",
   "game",
   "games",
-  "ttt"
+  "ttt",
+  "seance"
 ];
 
 // ---------------------------------------------------------
