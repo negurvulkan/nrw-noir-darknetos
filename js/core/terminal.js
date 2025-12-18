@@ -376,6 +376,7 @@ async function handleCommand(raw) {
       "  stat <pfad>       - Metadaten zu Datei/Verzeichnis",
       "  scan              - Schattennetz scannen",
       "  chat              - Chat-Befehle (help/online/send/inbox)",
+      "  seance            - Séance-Minigame mit Geist & Whispers",
       "  game / games      - Game Hub",
       "",
       "",
