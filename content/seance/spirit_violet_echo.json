@@ -74,6 +74,23 @@
     "Ein Pixel fällt aus der Realität.",
     "Stimmen rauschen von weit her."
   ],
+  "haunting": {
+    "baseChanceBoot": 0.01,
+    "baseChanceScan": 0.02,
+    "baseChanceCat": 0.02,
+    "baseChanceListen": 0.005,
+    "ttlHoursMin": 2,
+    "ttlHoursMax": 48,
+    "intervalSecondsMin": 30,
+    "intervalSecondsMax": 180,
+    "hauntTemplates": [
+      "…{{omen}} klebt an deinem Prompt.",
+      "Zwischen den Zeilen: {{noun}}.",
+      "Leise. Ich bin noch hier, {{user}}.",
+      "{{user}}, der Cursor atmet.",
+      "Ein Echo hängt zwischen den Zeilen."
+    ]
+  },
   "rareEvents": [
     {
       "id": "gate_open_1",

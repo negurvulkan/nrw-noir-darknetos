@@ -235,6 +235,7 @@ function seanceEnsureState(session) {
   session.topicHistory = Array.isArray(session.topicHistory) ? session.topicHistory : [];
   session.triggerScores = session.triggerScores || {};
   session.unlocked = session.unlocked || {};
+  session.banishCooldownUntil = session.banishCooldownUntil || 0;
 }
 
 function seanceTrackTokens(session, text = "") {
@@ -566,6 +567,7 @@ function seancePrintStatus(session) {
   const participants = Array.isArray(session.participants) ? session.participants : [];
   const last = session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleTimeString() : "unbekannt";
   const unlocks = session.unlocked ? Object.keys(session.unlocked) : [];
+  const haunting = typeof getActiveHaunting === "function" ? getActiveHaunting() : null;
 
   lines.push(`Séance ${session.id}:`);
   lines.push(`  Modus: ${session.mode} | Phase: ${session.phase}`);
@@ -578,6 +580,10 @@ function seancePrintStatus(session) {
   }
   if (session.muted?.length) {
     lines.push(`  Stummgeschaltet: ${session.muted.join(", ")}`);
+  }
+  if (haunting) {
+    const remaining = Math.max(0, (haunting.endsAt || Date.now()) - Date.now());
+    lines.push(`  Haunting: ${haunting.name || haunting.spiritId} · Intensität ${(haunting.intensity || 0).toFixed(2)} · Ende in ${Math.round(remaining / 3600000 * 10) / 10}h`);
   }
   lines.push("");
   printLines(lines);
@@ -598,6 +604,7 @@ function seancePrintHelp() {
     "  seance mute|unmute <user>   - Nutzer (ent)stumm schalten (Host)",
     "  seance purge [id]           - Whispers säubern (Host)",
     "  seance end                  - Sitzung schließen",
+    "  seance banish               - Aktiven Spuk bannen (falls vorhanden)",
     ""
   ]);
 }
@@ -743,6 +750,10 @@ async function seanceListenCommand() {
     printLines(["⚠ GATE OPEN – etwas klirrt im Untergrund.", ""], "success");
   } else {
     printLines([""], "dim");
+  }
+
+  if (typeof maybeStartHaunting === "function") {
+    await maybeStartHaunting("listen");
   }
 }
 
@@ -927,6 +938,69 @@ function seancePurgeCommand(args = []) {
   printLines([`Bereinigt. (${removed} Einträge entfernt)`, ""], "dim");
 }
 
+async function seanceBanishCommand() {
+  const session = seanceEnsureActive();
+  const haunting = typeof getActiveHaunting === "function" ? getActiveHaunting() : null;
+  if (!session && !haunting) {
+    printLines(["Keine Séance aktiv und kein Spuk gebunden.", ""], "dim");
+    return;
+  }
+  if (!session) {
+    printLines(["Starte eine Séance, um den Spuk zu bannen.", ""], "error");
+    return;
+  }
+  seanceEnsureState(session);
+
+  const now = seanceNow();
+  if (session.banishCooldownUntil && now < session.banishCooldownUntil) {
+    const waitMs = session.banishCooldownUntil - now;
+    printLines([`Das Ritual braucht Pause (${Math.ceil(waitMs / 1000)}s).`, ""], "dim");
+    return;
+  }
+
+  if (!haunting) {
+    printLines(["Kein aktiver Spuk. Die Leitung ist frei.", ""], "success");
+    return;
+  }
+
+  const whisperBonus = Math.min(0.25, (session.whisperCount || 0) * 0.03);
+  const triggerHit = (session.seenTokens || []).some(t => [\"blood\", \"ash\", \"silence\"].includes(String(t).toLowerCase()));
+  const moodBonus = ((session.mood || 0.5) - 0.5) * 0.4;
+  const patienceBonus = (session.spirit?.patience || 0) > 2 ? 0.1 : (session.spirit?.patience || 0) < 1 ? -0.1 : 0;
+
+  let chance = 0.4 + whisperBonus + (triggerHit ? 0.15 : 0) + moodBonus + patienceBonus;
+  chance = Math.max(0.1, Math.min(0.9, chance));
+
+  const roll = Math.random();
+  if (roll < chance) {
+    seanceAddLog(session, "system", `Bann-Ritual erfolgreich (${Math.round(chance * 100)}%).`);
+    printLines([
+      "Du murmelst Blut, Asche, Stille.",
+      "Der Raum wird warm. Das Echo verzieht sich.",
+      ""
+    ], "success");
+    if (typeof stopHaunting === "function") {
+      await stopHaunting("banished", { banished: true });
+    }
+    session.phase = "closing";
+    session.mood = seanceClampMood((session.mood || 0.5) + 0.1);
+  } else {
+    seanceAddLog(session, "system", `Bann misslungen (${Math.round(chance * 100)}%).`);
+    printLines([
+      "Das Ritual stottert. Ein höhnisches Knistern bleibt.",
+      "Intensität steigt leicht.",
+      ""
+    ], "error");
+    if (typeof bumpHauntingIntensity === "function") {
+      bumpHauntingIntensity(0.08);
+    }
+    seanceAdjustPatience(session, -0.5);
+    session.mood = seanceClampMood((session.mood || 0.5) - 0.05);
+    session.banishCooldownUntil = now + 120000; // 2 min
+  }
+  seanceSaveSession(session);
+}
+
 async function handleSeanceCommand(args = []) {
   const sub = (args[0] || "").toLowerCase();
   const rest = args.slice(1);
@@ -999,6 +1073,11 @@ async function handleSeanceCommand(args = []) {
 
   if (sub === "purge") {
     seancePurgeCommand(rest);
+    return;
+  }
+
+  if (sub === "banish") {
+    await seanceBanishCommand();
     return;
   }
 
