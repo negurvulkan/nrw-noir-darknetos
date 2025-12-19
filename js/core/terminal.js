@@ -340,6 +340,18 @@ async function handleCommand(raw) {
   }
 
   // ---------------------------------------------------------
+  // Ghostships: Quickshot (Koordinate ohne Präfix)
+  // ---------------------------------------------------------
+  if (typeof GS_STATE !== "undefined" &&
+      GS_STATE.active &&
+      parts.length === 1 &&
+      /^[A-Ja-j][0-9]{1,2}$/.test(base) &&
+      typeof gsHandleQuickshot === "function") {
+    const fired = await gsHandleQuickshot(base.toUpperCase());
+    if (fired) return;
+  }
+
+  // ---------------------------------------------------------
   // Game Hub
   // ---------------------------------------------------------
   if (base === "game" || base === "games") {

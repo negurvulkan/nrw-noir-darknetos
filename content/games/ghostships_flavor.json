@@ -1,0 +1,32 @@
+{
+  "hit": [
+    "Das Echo trifft verrostetes Metall.",
+    "Ein dumpfer Schlag – Treffer.",
+    "Schwarzglänzendes Wasser spritzt auf: Treffer."
+  ],
+  "miss": [
+    "Nur Nebel. Kein Widerstand.",
+    "Das Geschoss verliert sich im Wasser.",
+    "Stille. Fehlwurf."
+  ],
+  "sunk": [
+    "Das Wrack wird ins Nichts gezogen.",
+    "Die Reling verschwindet unter Flammennebel.",
+    "Letzter Bolzen bricht – versenkt."
+  ],
+  "decay": [
+    "Ein Rumpf verrottet von allein.",
+    "Geisterfäule frisst Metall.",
+    "Der Nebel nagt an einem Schiffsrücken."
+  ],
+  "manifest": [
+    "Im Schatten entsteht ein neues Flackern.",
+    "Etwas formt sich aus schwarzem Wasser.",
+    "Ein Wisp sammelt sich zu Planken."
+  ],
+  "fog": [
+    "Dichter Nebel verschluckt Sichtlinien.",
+    "Ein kalter Schleier legt sich über das Board.",
+    "Echo-Nebel verzerrt das Radar."
+  ]
+}
