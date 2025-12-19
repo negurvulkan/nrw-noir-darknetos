@@ -31,6 +31,7 @@ const BUILTIN_COMMANDS = [
   "game",
   "games",
   "ttt",
+  "haunt",
   "seance"
 ];
 

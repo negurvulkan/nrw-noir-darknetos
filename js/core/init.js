@@ -58,11 +58,18 @@ window.addEventListener("load", async () => {
 
   const motd = await loadMotd();
   if (motd) {
-    printLines([`MOTD: ${motd}`, ""], "dim");
+    const corrupted = typeof hauntMaybeCorruptMotd === "function"
+      ? await hauntMaybeCorruptMotd(motd)
+      : motd;
+    printLines([`MOTD: ${corrupted}`, ""], "dim");
   }
 
   // Login starten / gespeicherten User herstellen
   await ensureLogin();
+
+  if (typeof bootstrapHaunting === "function") {
+    await bootstrapHaunting("boot");
+  }
 
   inputEl.focus();
 });

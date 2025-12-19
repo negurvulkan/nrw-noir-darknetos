@@ -278,6 +278,9 @@ async function handleCommand(raw) {
     if (typeof printWelcome === "function") {
       printWelcome();
     }
+    if (typeof bootstrapHaunting === "function") {
+      await bootstrapHaunting("login");
+    }
 
     return;
   }
@@ -375,6 +378,7 @@ async function handleCommand(raw) {
       "  tree [pfad]       - Verzeichnisbaum anzeigen",
       "  stat <pfad>       - Metadaten zu Datei/Verzeichnis",
       "  scan              - Schattennetz scannen",
+      "  haunt             - Status des Spuks prüfen",
       "  chat              - Chat-Befehle (help/online/send/inbox)",
       "  seance            - Séance-Minigame mit Geist & Whispers",
       "  game / games      - Game Hub",
@@ -482,6 +486,10 @@ async function handleCommand(raw) {
 
     const lines = await loadDocumentByMeta(meta);
     printLines(lines);
+    if (typeof maybeStartHaunting === "function") {
+      const cursed = (meta.path || "").includes("/deep") || (meta.meta && meta.meta.cursed === true);
+      await maybeStartHaunting("cat", { cursed });
+    }
     return;
   }
 
@@ -506,6 +514,18 @@ async function handleCommand(raw) {
 
   if (base === "scan") {
     await runScanCommand();
+    if (typeof maybeStartHaunting === "function") {
+      await maybeStartHaunting("scan", { depth: true });
+    }
+    return;
+  }
+
+  if (base === "haunt") {
+    if (typeof handleHauntCommand === "function") {
+      await handleHauntCommand(args);
+    } else {
+      printLines(["Haunt-Modul nicht geladen.", ""], "error");
+    }
     return;
   }
 
