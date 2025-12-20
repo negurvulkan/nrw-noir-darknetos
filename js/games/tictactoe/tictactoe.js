@@ -960,3 +960,20 @@ if (typeof registerGame === "function") {
     help: () => tttPrintHelp()
   });
 }
+
+// ---------------------------------------------------------
+// Input Interceptor für 1-9 Moves
+// ---------------------------------------------------------
+if (typeof window.registerInputInterceptor === "function") {
+  window.registerInputInterceptor(async (cmd, parts, base) => {
+    // Nur aktiv, wenn Spiel läuft
+    if (!TTT_ACTIVE && (!TTT_ONLINE.active && !TTT_ONLINE.gameId)) return false;
+
+    // Nur 1-9
+    if (parts.length === 1 && /^[1-9]$/.test(base)) {
+      await tttHandleMove(base);
+      return true;
+    }
+    return false;
+  });
+}

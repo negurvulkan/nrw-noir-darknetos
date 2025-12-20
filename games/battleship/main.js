@@ -1,3 +1,5 @@
+import { GhostshipsEngine } from "../../js/games/ghostships/engine.js";
+
 const client = GhostshipsEngine.createClient({ pollMs: 3500 });
 
 const state = {
