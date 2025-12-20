@@ -20,6 +20,7 @@ const els = {
   create: document.getElementById("btn-create"),
   join: document.getElementById("btn-join"),
   copyId: document.getElementById("btn-copy-id"),
+  createLink: document.getElementById("btn-create-link"),
   copyLink: document.getElementById("btn-copy-link"),
   leave: document.getElementById("btn-leave"),
   rematch: document.getElementById("btn-rematch"),
@@ -248,6 +249,7 @@ function updateInfo(match) {
 
   const active = ["setup", "active"].includes(match.phase);
   els.copyId.disabled = !active;
+  els.createLink.disabled = !active;
   els.copyLink.disabled = !active;
   els.leave.disabled = !active;
   els.rematch.disabled = match.phase !== "finished";
@@ -475,11 +477,22 @@ function copyId() {
   setStatus("Match-ID kopiert.");
 }
 
+function getMatchLink(matchId) {
+  const path = window.location.pathname.replace(/\/$/, "");
+  return `${window.location.origin}${path}/?match=${matchId}`;
+}
+
+function createLink() {
+  const match = client.getState().match;
+  if (!match) return;
+  copy(getMatchLink(match.id));
+  setStatus("Match-Link kopiert.");
+}
+
 function copyLink() {
   const match = client.getState().match;
   if (!match) return;
-  const url = `${window.location.origin}/darknet/games/battleship/?match=${match.id}`;
-  copy(url);
+  copy(getMatchLink(match.id));
   setStatus("Match-Link kopiert.");
 }
 
@@ -509,6 +522,7 @@ function bindEvents() {
   els.rematch.addEventListener("click", handleRematch);
   els.refresh.addEventListener("click", handleRefresh);
   els.copyId.addEventListener("click", copyId);
+  els.createLink.addEventListener("click", createLink);
   els.copyLink.addEventListener("click", copyLink);
   els.toggleSpectate.addEventListener("change", e => syncSpectator(e.target.checked));
   els.toggleCRT.addEventListener("change", e => syncCRT(e.target.checked));
