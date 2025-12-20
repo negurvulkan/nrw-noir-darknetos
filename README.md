@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.12.0
+Version 1.12.1
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -19,6 +19,11 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - `/content/` – JSON-Content für Terminalbefehle (`index.json`, `motd.json`, etc.).
 - `/adventurebuilder/` – UI-Assets & Blockly-Glue für den Adventure Builder.
 - `/content-builder/` – PHP-Backend & JSON-Builder/API.
+
+## Neu in 1.12.1
+
+- Ghostships respektiert `allowAdjacency` nun serverseitig vollständig: Backend, Auto-Platzierung und Haunted-Manifestationen verhindern direkt angrenzende Schiffe, wenn die Regel deaktiviert ist.
+- Terminal- und Web-GUI nutzen gemeinsame Board-Koordinaten aus der Engine; die GUI-Boards wurden refaktoriert (vereinheitlichte Cell-Renderer & Input-Hooks) und bleiben dabei kompatibel zum bestehenden Match-API-Flow.
 
 ## Neu in 1.12.0
 

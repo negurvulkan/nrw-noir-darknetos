@@ -39,6 +39,41 @@ const els = {
 
 const STORAGE_KEY = "ghostships_gui_name";
 
+function boardLetters(size) {
+  if (typeof GhostshipsEngine?.boardLetters === "function") {
+    return GhostshipsEngine.boardLetters(size);
+  }
+  return size === 10
+    ? ["A","B","C","D","E","F","G","H","I","J"]
+    : ["A","B","C","D","E","F","G","H"];
+}
+
+function forEachBoardCell(size, cb) {
+  const letters = boardLetters(size);
+  for (let r = 1; r <= size; r++) {
+    letters.forEach(col => cb(`${col}${r}`));
+  }
+}
+
+function createBoardGrid(size, renderCell) {
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+  forEachBoardCell(size, pos => grid.appendChild(renderCell(pos)));
+  return grid;
+}
+
+function attachCellAction(btn, handler) {
+  btn.addEventListener("click", handler);
+  btn.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handler();
+    }
+  });
+}
+
 function userLabel() {
   const base = (els.name.value || "").trim() || "user";
   return `${base} (GUI)`;
@@ -78,22 +113,6 @@ function formatLogEntry(entry) {
   }
 }
 
-function buildGrid(size, renderer) {
-  const grid = document.createElement("div");
-  grid.className = "grid";
-  grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-  grid.style.gridTemplateRows = `repeat(${size}, 1fr)`;
-
-  const letters = size === 10 ? ["A","B","C","D","E","F","G","H","I","J"] : ["A","B","C","D","E","F","G","H"];
-  for (let r = 1; r <= size; r++) {
-    for (let c = 0; c < size; c++) {
-      const pos = `${letters[c]}${r}`;
-      grid.appendChild(renderer(pos));
-    }
-  }
-  return grid;
-}
-
 function renderRadar(match) {
   const size = match.boardSize;
   const radar = match.boards?.radar || { hits: [], misses: [], pending: [], fogged: [] };
@@ -101,37 +120,21 @@ function renderRadar(match) {
   const misses = new Set(radar.misses || []);
   const pending = new Set(radar.pending || []);
   const fogged = new Set(radar.fogged || []);
-  const wrap = document.createElement("div");
-  wrap.className = "grid";
-  wrap.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-  wrap.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+  return createBoardGrid(size, pos => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cell";
+    btn.dataset.pos = pos;
+    btn.ariaLabel = `Feld ${pos}`;
+    if (hits.has(pos)) btn.classList.add("hit");
+    if (misses.has(pos)) btn.classList.add("miss");
+    if (pending.has(pos)) btn.classList.add("pending");
+    if (fogged.has(pos)) btn.classList.add("fog");
+    if (state.revealCells.has(`radar-${pos}`)) btn.classList.add("reveal");
 
-  const letters = size === 10 ? ["A","B","C","D","E","F","G","H","I","J"] : ["A","B","C","D","E","F","G","H"];
-  for (let r = 1; r <= size; r++) {
-    for (let c = 0; c < size; c++) {
-      const pos = `${letters[c]}${r}`;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "cell";
-      btn.dataset.pos = pos;
-      btn.ariaLabel = `Feld ${pos}`;
-      if (hits.has(pos)) btn.classList.add("hit");
-      if (misses.has(pos)) btn.classList.add("miss");
-      if (pending.has(pos)) btn.classList.add("pending");
-      if (fogged.has(pos)) btn.classList.add("fog");
-      if (state.revealCells.has(`radar-${pos}`)) btn.classList.add("reveal");
-
-      btn.addEventListener("click", () => fireAt(pos));
-      btn.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          fireAt(pos);
-        }
-      });
-      wrap.appendChild(btn);
-    }
-  }
-  return wrap;
+    attachCellAction(btn, () => fireAt(pos));
+    return btn;
+  });
 }
 
 function renderOwnBoard(match) {
@@ -151,57 +154,41 @@ function renderOwnBoard(match) {
     });
   });
 
-  const letters = size === 10 ? ["A","B","C","D","E","F","G","H","I","J"] : ["A","B","C","D","E","F","G","H"];
-  const wrap = document.createElement("div");
-  wrap.className = "grid";
-  wrap.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-  wrap.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+  return createBoardGrid(size, pos => {
+    const cell = cells[pos] || {};
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cell";
+    btn.dataset.pos = pos;
+    btn.ariaLabel = `Feld ${pos}`;
 
-  for (let r = 1; r <= size; r++) {
-    for (let c = 0; c < size; c++) {
-      const pos = `${letters[c]}${r}`;
-      const cell = cells[pos] || {};
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "cell";
-      btn.dataset.pos = pos;
-      btn.ariaLabel = `Feld ${pos}`;
-
-      if (cell.ships?.length) btn.classList.add("ship");
-      if (cell.hit) btn.classList.add("hit");
-      if (fogged.has(pos)) btn.classList.add("fog");
-      if (state.decayCells.has(pos)) btn.classList.add("decay");
-      if (state.manifestCells.has(pos)) btn.classList.add("manifest");
-      if (state.revealCells.has(`own-${pos}`)) btn.classList.add("reveal");
-      if (cell.ships?.length) {
-        const ship = cell.ships[0];
-        const orientation = detectOrientation(ship);
-        btn.dataset.ship = ship.type;
-        btn.dataset.orientation = orientation;
-        btn.dataset.frame = cell.hit ? "hit" : "ok";
-        const spriteFrame = getSpriteFrame(ship, pos, orientation, !!cell.hit);
-        if (spriteFrame) {
-          btn.dataset.sprite = spriteFrame.sprite;
-          btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
-          btn.style.setProperty("--sprite-bg-width", `${spriteFrame.bgWidth}px`);
-          btn.style.setProperty("--sprite-bg-height", `${spriteFrame.bgHeight}px`);
-          btn.style.setProperty("--sprite-frame-x", `${spriteFrame.posX}px`);
-          btn.style.setProperty("--sprite-frame-y", `${spriteFrame.posY}px`);
-          btn.style.setProperty("--sprite-size", `${spriteFrame.tile}px`);
-        }
+    if (cell.ships?.length) btn.classList.add("ship");
+    if (cell.hit) btn.classList.add("hit");
+    if (fogged.has(pos)) btn.classList.add("fog");
+    if (state.decayCells.has(pos)) btn.classList.add("decay");
+    if (state.manifestCells.has(pos)) btn.classList.add("manifest");
+    if (state.revealCells.has(`own-${pos}`)) btn.classList.add("reveal");
+    if (cell.ships?.length) {
+      const ship = cell.ships[0];
+      const orientation = detectOrientation(ship);
+      btn.dataset.ship = ship.type;
+      btn.dataset.orientation = orientation;
+      btn.dataset.frame = cell.hit ? "hit" : "ok";
+      const spriteFrame = getSpriteFrame(ship, pos, orientation, !!cell.hit);
+      if (spriteFrame) {
+        btn.dataset.sprite = spriteFrame.sprite;
+        btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
+        btn.style.setProperty("--sprite-bg-width", `${spriteFrame.bgWidth}px`);
+        btn.style.setProperty("--sprite-bg-height", `${spriteFrame.bgHeight}px`);
+        btn.style.setProperty("--sprite-frame-x", `${spriteFrame.posX}px`);
+        btn.style.setProperty("--sprite-frame-y", `${spriteFrame.posY}px`);
+        btn.style.setProperty("--sprite-size", `${spriteFrame.tile}px`);
       }
-
-      btn.addEventListener("click", () => placeAt(pos));
-      btn.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          placeAt(pos);
-        }
-      });
-      wrap.appendChild(btn);
     }
-  }
-  return wrap;
+
+    attachCellAction(btn, () => placeAt(pos));
+    return btn;
+  });
 }
 
 function updateBoards(match) {

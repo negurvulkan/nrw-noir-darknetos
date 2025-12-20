@@ -258,20 +258,24 @@ function gsParsePos($pos, $size)
     return $colLetter . $rowNum;
 }
 
-function gsNeighbors($pos, $size)
+function gsNeighbors($pos, $size, $includeDiagonals = false)
 {
     $colLetter = $pos[0];
     $rowNum = intval(substr($pos, 1));
-    $coords = [];
-    foreach ([[1,0],[-1,0],[0,1],[0,-1]] as [$dc,$dr]) {
-        $cOrd = ord($colLetter) + $dc;
-        $r = $rowNum + $dr;
-        if ($r < 1 || $r > $size) continue;
-        $cLetter = chr($cOrd);
-        if ($cLetter < 'A') continue;
-        $coords[] = $cLetter . $r;
+    $vectors = [[1,0],[-1,0],[0,1],[0,-1]];
+    if ($includeDiagonals) {
+        $vectors = array_merge($vectors, [[1,1],[1,-1],[-1,1],[-1,-1]]);
     }
-    return $coords;
+
+    $coords = [];
+    foreach ($vectors as [$dc, $dr]) {
+        $candidate = chr(ord($colLetter) + $dc) . ($rowNum + $dr);
+        $parsed = gsParsePos($candidate, $size);
+        if ($parsed) {
+            $coords[] = $parsed;
+        }
+    }
+    return array_values(array_unique($coords));
 }
 
 function gsShipLength($type)
@@ -331,24 +335,30 @@ function gsShipCells($startPos, $dir, $length, $size)
     return $cells;
 }
 
-function gsCellsFree($board, $cells)
+function gsCellsClearForPlacement($board, $cells, $size, $allowAdjacency)
 {
-    foreach ($board['ships'] as $ship) {
-        foreach ($ship['cells'] as $cell) {
-            if (in_array($cell, $cells, true)) {
-                return false;
+    $shots = $board['shots'] ? array_column($board['shots'], 'pos') : [];
+    $occupied = gsAllShipCells($board);
+
+    foreach ($cells as $cell) {
+        if (in_array($cell, $occupied, true)) {
+            return "Position kollidiert mit bestehenden Schiffen.";
+        }
+        if (in_array($cell, $shots, true)) {
+            return "Position kollidiert mit bestehenden Schüssen.";
+        }
+        if (!$allowAdjacency) {
+            foreach (gsNeighbors($cell, $size, true) as $neighbor) {
+                if (in_array($neighbor, $occupied, true)) {
+                    return "Schiffe müssen einen Kachelabstand halten.";
+                }
             }
         }
     }
-    foreach ($cells as $cell) {
-        if (in_array($cell, $board['shots'] ? array_column($board['shots'], 'pos') : [], true)) {
-            return false;
-        }
-    }
-    return true;
+    return null;
 }
 
-function gsPlaceShip(&$board, $fleetCounts, $type, $pos, $dir, $size)
+function gsPlaceShip(&$board, $fleetCounts, $type, $pos, $dir, $size, $allowAdjacency = true)
 {
     $neededOfType = $fleetCounts[$type] ?? 0;
 
@@ -371,8 +381,9 @@ function gsPlaceShip(&$board, $fleetCounts, $type, $pos, $dir, $size)
         return "Position liegt außerhalb des Boards.";
     }
 
-    if (!gsCellsFree($board, $cells)) {
-        return "Position kollidiert mit bestehenden Schiffen.";
+    $collision = gsCellsClearForPlacement($board, $cells, $size, $allowAdjacency);
+    if ($collision) {
+        return $collision;
     }
 
     $board['ships'][] = [
@@ -386,7 +397,7 @@ function gsPlaceShip(&$board, $fleetCounts, $type, $pos, $dir, $size)
     return null;
 }
 
-function gsAutoPlace(&$board, $fleetExpanded, $fleetCounts, $size, &$rng)
+function gsAutoPlace(&$board, $fleetExpanded, $fleetCounts, $size, &$rng, $allowAdjacency = true)
 {
     foreach ($fleetExpanded as $def) {
         $tries = 0;
@@ -396,7 +407,7 @@ function gsAutoPlace(&$board, $fleetExpanded, $fleetCounts, $size, &$rng)
             $randRow = (int) floor(gsMulberry32Next($rng) * $size) + 1;
             $dir = gsMulberry32Next($rng) > 0.5 ? 'h' : 'v';
             $pos = $randCol . $randRow;
-            $error = gsPlaceShip($board, $fleetCounts, $def['type'], $pos, $dir, $size);
+            $error = gsPlaceShip($board, $fleetCounts, $def['type'], $pos, $dir, $size, $allowAdjacency);
             $tries++;
         } while ($error && $tries < 200);
 
@@ -646,7 +657,13 @@ function gsMaybeEvent(&$match, $actor)
             $cells = gsShipCells($start, $dir, $len, $size);
             $tries++;
             if (!$cells) continue;
-            if (!gsCellsFree($board, $cells)) continue;
+            $placementError = gsCellsClearForPlacement(
+                $board,
+                $cells,
+                $size,
+                $match['rules']['allowAdjacency'] ?? true
+            );
+            if ($placementError) continue;
             $shipType = $len === 1 ? 'wisp' : 'echo';
             $shipLen = gsShipLength($shipType) ?? $len;
             if ($shipLen > $board['manifest_left']) {
@@ -946,7 +963,8 @@ switch ($action) {
         if (!$normPos) gsRespond(['ok' => false, 'error' => 'Ungültige Position.'], 400);
         if (!in_array($dir, ['h','v'])) $dir = 'h';
 
-        $error = gsPlaceShip($board, $fleetCounts, $ship, $normPos, $dir, $match['board_size']);
+        $allowAdjacency = $match['rules']['allowAdjacency'] ?? true;
+        $error = gsPlaceShip($board, $fleetCounts, $ship, $normPos, $dir, $match['board_size'], $allowAdjacency);
         if ($error) gsRespond(['ok' => false, 'error' => $error], 400);
 
         $match['updated_at'] = $now;
@@ -969,7 +987,15 @@ switch ($action) {
         $fleetDefs = $match['fleet_defs'] ?? $GS_GAME_CONFIG['fleetExpanded'];
         $manifestMax = $match['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? ($GS_GAME_CONFIG['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? 2);
         $match['boards'][$player] = gsEmptyBoard($match['board_size'], $manifestMax);
-        $error = gsAutoPlace($match['boards'][$player], $fleetDefs, $fleetCounts, $match['board_size'], $match['rng_state']);
+        $allowAdjacency = $match['rules']['allowAdjacency'] ?? true;
+        $error = gsAutoPlace(
+            $match['boards'][$player],
+            $fleetDefs,
+            $fleetCounts,
+            $match['board_size'],
+            $match['rng_state'],
+            $allowAdjacency
+        );
         if ($error) gsRespond(['ok' => false, 'error' => $error], 400);
 
         $match['updated_at'] = $now;
