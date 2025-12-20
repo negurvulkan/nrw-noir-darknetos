@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.10.1
+Version 1.11.0
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -32,15 +32,19 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 
 - Neues Haunting-System: Mit geringer Chance heftet sich ein Geist persistent an den User. Spuk-Linien und Glitches erscheinen zeitgesteuert (localStorage-basiert), `haunt` zeigt den Status, `haunt calm` schwächt die Intensität leicht. Das Séance-Minigame kann den Spuk via `seance banish` beenden; Cooldowns und TTLs steuern Häufigkeit und Dauer.
 
-## Neu in 1.10.1
+## Neu in 1.11.0
 
-- Ghostships kennzeichnet jetzt Treffer auf der eigenen Flotte deutlich: Terminal-Grids nutzen `=` auf getroffenen Segmenten, die GUI zeigt den passenden Framesheet-Hitframe auf den Schiffskacheln.
+- Ghostships lädt Flotten, Schiffstypen (inkl. Spritesheet-Metadaten) und Match-Regeln vollständig aus JSON (`content/games/battleship/`). GUI- und Terminal-Client nutzen den gemeinsamen Katalog und Match-Config, die API validiert Länge/Counts dynamisch, und das GUI rendert Schiffssprites nach dem 32×32-Spritesheet-Standard (row/col, 2 Zeilen ok/hit) ohne Hardcodes.
 
 ## Neu in 1.10.0
 
 - Gemeinsame **Ghostships Engine** für Terminal und GUI (WebSocket-kompatibles Polling, Match-API bleibt unverändert).
 - Neue responsive **Ghostships Web GUI** unter `/darknet/games/battleship`: zwei Grids (Radar & eigene Flotte), Turn-Indikator, Log, Auto-Platzierung, Platziermodus, CRT-Overlay sowie Spectator-Lesemodus.
 - Spritesheet-Metadaten und Platzhalter-Sheets für Ghostships (32×32 Tiles, horizontal/vertikal, intakt/beschädigt) zur Integration von visuellen Assets (Fog/Manifest/Decay-Effekte).
+
+## Neu in 1.10.1
+
+- Ghostships kennzeichnet jetzt Treffer auf der eigenen Flotte deutlich: Terminal-Grids nutzen `=` auf getroffenen Segmenten, die GUI zeigt den passenden Framesheet-Hitframe auf den Schiffskacheln.
 
 ## Neu in 1.9.0
 

@@ -1,0 +1,32 @@
+{
+  "id": "wisp",
+  "name": "Wisp",
+  "length": 1,
+  "rarity": "mythic",
+  "rules": {
+    "spawnable": false,
+    "manifestable": true,
+    "maxPerPlayer": 4
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/wisp.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 1,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "core", "col": 0 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "~",
+    "charHit": "x"
+  }
+}

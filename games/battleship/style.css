@@ -140,10 +140,16 @@ input, select {
   pointer-events: none;
   background-image: var(--sprite-url, none);
   background-repeat: no-repeat;
-  background-size: calc(var(--sprite-size, 32px) * var(--sprite-frame-count, 4)) var(--sprite-size, 32px);
-  background-position: calc(var(--sprite-frame-index, 0) * var(--sprite-size, 32px) * -1) 0;
+  background-size: var(--sprite-bg-width, 32px) var(--sprite-bg-height, 64px);
+  background-position:
+    calc(var(--sprite-frame-x, 0px) * -1)
+    calc(var(--sprite-frame-y, 0px) * -1);
   image-rendering: pixelated;
   opacity: .92;
+}
+.cell.ship[data-orientation="v"]::after {
+  transform: rotate(90deg);
+  transform-origin: center;
 }
 .cell.ship.hit::after { border: 1px solid rgba(255,255,255,.08); }
 .cell.hit { background: #3b0d24; color: #ffb2d3; }

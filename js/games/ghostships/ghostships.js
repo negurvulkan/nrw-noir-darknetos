@@ -12,6 +12,8 @@ let GS_STATE = {
 };
 
 let GS_FLAVOR = null;
+let GS_SHIP_CATALOG = null;
+let GS_CONFIG = null;
 
 function gsEnsureClient() {
   if (!GS_CLIENT) {
@@ -29,6 +31,23 @@ function gsResetState() {
     active: false,
     lastLog: 0
   };
+}
+
+async function gsLoadData() {
+  if (GS_SHIP_CATALOG && GS_CONFIG) {
+    return { catalog: GS_SHIP_CATALOG, config: GS_CONFIG };
+  }
+  const [catalog, config] = await Promise.all([
+    GhostshipsEngine.loadBattleshipCatalog(),
+    GhostshipsEngine.loadBattleshipConfig()
+  ]);
+  GS_SHIP_CATALOG = catalog;
+  GS_CONFIG = config;
+  return { catalog, config };
+}
+
+function gsShipDef(id) {
+  return GS_SHIP_CATALOG?.get(id) || null;
 }
 
 async function gsLoadFlavor() {
@@ -84,17 +103,23 @@ function gsRenderRadar(match) {
 function gsRenderOwnBoard(match) {
   const size = match.boardSize;
   const own = match.boards?.own || { ships: [], fogged: [] };
-  const shipCells = new Set();
+  const shipCells = new Map();
   const hitCells = new Set();
   (own.ships || []).forEach(ship => {
-    (ship.cells || []).forEach(cell => shipCells.add(cell));
+    (ship.cells || []).forEach(cell => shipCells.set(cell, ship.type));
     (ship.hits || []).forEach(h => hitCells.add(h));
   });
   const fogged = new Set(own.fogged || []);
 
   return gsRenderGrid(size, pos => {
-    if (hitCells.has(pos)) return "=";
-    if (shipCells.has(pos)) return "#";
+    if (hitCells.has(pos)) {
+      const def = gsShipDef(shipCells.get(pos));
+      return def?.terminal?.charHit || "=";
+    }
+    if (shipCells.has(pos)) {
+      const def = gsShipDef(shipCells.get(pos));
+      return def?.terminal?.charOk || "#";
+    }
     if (fogged.has(pos)) return "?";
     return "·";
   });
@@ -173,6 +198,7 @@ async function gsFetchState({ announce = true } = {}) {
   const lastSeenLog = prevState.lastLogTs || 0;
   const match = await client.fetchState();
   if (!match) return null;
+  await gsLoadData();
 
   GS_STATE.active = ["setup", "active"].includes(match.phase);
   GS_STATE.lastLog = match.log?.length || 0;
@@ -194,9 +220,11 @@ async function gsFetchState({ announce = true } = {}) {
 }
 
 async function gsCreate(size) {
+  await gsLoadData();
   const client = gsEnsureClient();
   const user = getUserName();
-  const match = await client.createMatch(size || 8, user);
+  const boardSize = GS_CONFIG?.boardSize || size || 8;
+  const match = await client.createMatch(boardSize, user);
   GS_STATE.active = true;
   printLines([
     `Ghostships-Match erstellt: ${match?.id || "(?)"}`,
@@ -282,6 +310,13 @@ async function gsRematch() {
 async function gsHandleCommand(args = []) {
   const sub = (args[0] || "").toLowerCase();
   if (!sub || sub === "help") {
+    await gsLoadData();
+    const fleetLines = (GS_CONFIG?.fleet || []).map(entry => {
+      const def = gsShipDef(entry.shipId);
+      const label = def?.name || entry.shipId;
+      const suffix = entry.count > 1 ? ` ×${entry.count}` : "";
+      return `    - ${label} (${entry.length})${suffix}`;
+    });
     printLines([
       "Ghostships Befehle:",
       "  gs help                  - diese Hilfe",
@@ -289,7 +324,7 @@ async function gsHandleCommand(args = []) {
       "  gs join <MATCHID>        - Lobby beitreten",
       "  gs invite <user>         - per Chat einladen",
       "  gs status                - Matchstatus + Boards",
-      "  gs place <ship> <pos> <h|v> - Schiff setzen (wraith3, barge2, skiff2, relic1)",
+      "  gs place <ship> <pos> <h|v> - Schiff setzen",
       "  gs auto                  - automatische Platzierung",
       "  gs ready                 - Bereitschaft melden",
       "  gs fire <pos>            - Schuss abgeben (z.B. D5)",
@@ -298,6 +333,9 @@ async function gsHandleCommand(args = []) {
       "  gs log [n]               - Logeinträge",
       "  gs leave                 - Match verlassen/aufgeben",
       "  gs rematch               - neues Match mit gleicher Lobby",
+      "",
+      "Fleet laut config:",
+      ...fleetLines,
       "",
       "Quickshot: Im aktiven Match reicht 'D5' als Eingabe.",
       ""

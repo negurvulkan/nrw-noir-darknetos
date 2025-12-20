@@ -1,0 +1,33 @@
+{
+  "id": "barge",
+  "name": "Barge",
+  "length": 2,
+  "rarity": "uncommon",
+  "rules": {
+    "spawnable": true,
+    "manifestable": false,
+    "maxPerPlayer": 1
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/barge.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 2,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "front", "col": 0 },
+      { "name": "rear", "col": 1 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "=",
+    "charHit": "*"
+  }
+}

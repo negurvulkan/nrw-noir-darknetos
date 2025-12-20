@@ -1,0 +1,34 @@
+{
+  "id": "wraith",
+  "name": "Wraith",
+  "length": 3,
+  "rarity": "common",
+  "rules": {
+    "spawnable": true,
+    "manifestable": true,
+    "maxPerPlayer": 1
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/wraith.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 3,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "front", "col": 0 },
+      { "name": "mid", "col": 1 },
+      { "name": "rear", "col": 2 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "#",
+    "charHit": "X"
+  }
+}

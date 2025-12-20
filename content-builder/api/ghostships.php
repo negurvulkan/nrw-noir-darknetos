@@ -5,6 +5,7 @@ header("Content-Type: application/json; charset=utf-8");
 
 $dataDir   = __DIR__ . "/data";
 $storeFile = $dataDir . "/ghostships-sessions.json";
+$contentDir = realpath(__DIR__ . "/../../content/games/battleship");
 
 if (!is_dir($dataDir)) {
     mkdir($dataDir, 0777, true);
@@ -16,6 +17,128 @@ function gsRespond($payload, $code = 200)
     echo json_encode($payload);
     exit;
 }
+
+if (!$contentDir) {
+    gsRespond(["ok" => false, "error" => "Battleship-Content-Verzeichnis fehlt."], 500);
+}
+
+function gsLoadJson($file)
+{
+    if (!file_exists($file)) {
+        gsRespond(["ok" => false, "error" => "Fehlende Datei: " . basename($file)], 500);
+    }
+    $raw = file_get_contents($file);
+    $data = json_decode($raw, true);
+    if ($data === null) {
+        gsRespond(["ok" => false, "error" => "Ungültiges JSON in " . basename($file)], 500);
+    }
+    return $data;
+}
+
+function gsNormalizeSegments($length, $segments)
+{
+    if (!is_array($segments) || !count($segments)) {
+        $auto = [];
+        for ($i = 0; $i < $length; $i++) {
+            $name = $i === 0 ? "front" : ($i === $length - 1 ? "rear" : "mid");
+            $auto[] = ["name" => $name, "col" => $i];
+        }
+        return $auto;
+    }
+    $normalized = [];
+    foreach ($segments as $idx => $seg) {
+        $normalized[] = [
+            "name" => $seg["name"] ?? ($idx === 0 ? "front" : ($idx === $length - 1 ? "rear" : "mid")),
+            "col" => isset($seg["col"]) ? intval($seg["col"]) : $idx
+        ];
+    }
+    return $normalized;
+}
+
+function gsLoadShipCatalog($contentDir)
+{
+    $catalog = [];
+    $index = gsLoadJson($contentDir . "/ships/index.json");
+    $ids = isset($index["shipIds"]) && is_array($index["shipIds"]) ? $index["shipIds"] : [];
+    foreach ($ids as $id) {
+        $def = gsLoadJson($contentDir . "/ships/" . $id . ".json");
+        $length = intval($def["length"] ?? 0);
+        if (!$length) {
+            continue;
+        }
+        $def["segments"] = gsNormalizeSegments($length, $def["segments"] ?? []);
+        $catalog[$id] = $def;
+    }
+    if (!count($catalog)) {
+        gsRespond(["ok" => false, "error" => "Keine Schiffdefinitionen gefunden."], 500);
+    }
+    return $catalog;
+}
+
+function gsLoadGameConfig($contentDir, $catalog)
+{
+    $config = gsLoadJson($contentDir . "/config.json");
+    $boardSize = intval($config["boardSize"] ?? 8);
+    $fleetRaw = is_array($config["fleet"] ?? null) ? $config["fleet"] : [];
+    $fleet = [];
+    $fleetCounts = [];
+    foreach ($fleetRaw as $entry) {
+        $shipId = $entry["shipId"] ?? null;
+        $count = intval($entry["count"] ?? 0);
+        if (!$shipId || $count <= 0) continue;
+        if (!isset($catalog[$shipId])) {
+            gsRespond(["ok" => false, "error" => "Unbekannter shipId in config: {$shipId}"], 500);
+        }
+        $def = $catalog[$shipId];
+        $max = $def["rules"]["maxPerPlayer"] ?? null;
+        if (is_int($max) && $count > $max) {
+            gsRespond(["ok" => false, "error" => "Config count für {$shipId} überschreitet maxPerPlayer ({$max})."], 500);
+        }
+        $fleet[] = ["shipId" => $shipId, "count" => $count, "length" => intval($def["length"]), "name" => $def["name"] ?? $shipId];
+        $fleetCounts[$shipId] = $count;
+    }
+
+    $haunted = $config["rules"]["hauntedEvents"] ?? [];
+    $manifest = $haunted["manifest"] ?? [];
+    $decay = $haunted["decay"] ?? [];
+    $fog = $haunted["fog"] ?? [];
+    $rules = [
+        "allowAdjacency" => ($config["rules"]["allowAdjacency"] ?? true) !== false,
+        "hauntedEvents" => [
+            "enabled" => ($haunted["enabled"] ?? true) !== false,
+            "chancePerTurn" => isset($haunted["chancePerTurn"]) ? floatval($haunted["chancePerTurn"]) : 0.12,
+            "manifest" => [
+                "enabled" => ($manifest["enabled"] ?? true) !== false,
+                "maxExtraSegmentsPerPlayer" => isset($manifest["maxExtraSegmentsPerPlayer"]) ? intval($manifest["maxExtraSegmentsPerPlayer"]) : 2
+            ],
+            "decay" => [
+                "enabled" => ($decay["enabled"] ?? true) !== false,
+                "cooldownTurns" => isset($decay["cooldownTurns"]) ? intval($decay["cooldownTurns"]) : 2
+            ],
+            "fog" => [
+                "enabled" => (($fog["enabled"] ?? true) !== false)
+            ]
+        ]
+    ];
+
+    $fleetExpanded = [];
+    foreach ($fleet as $entry) {
+        for ($i = 0; $i < $entry["count"]; $i++) {
+            $fleetExpanded[] = ["type" => $entry["shipId"], "length" => $entry["length"]];
+        }
+    }
+
+    return [
+        "boardSize" => $boardSize,
+        "fleet" => $fleet,
+        "fleetCounts" => $fleetCounts,
+        "fleetExpanded" => $fleetExpanded,
+        "rules" => $rules
+    ];
+}
+
+$GS_SHIP_CATALOG = gsLoadShipCatalog($contentDir);
+$GS_GAME_CONFIG = gsLoadGameConfig($contentDir, $GS_SHIP_CATALOG);
 
 function gsLoadMatches($file)
 {
@@ -151,32 +274,22 @@ function gsNeighbors($pos, $size)
     return $coords;
 }
 
-function gsFleet($boardSize)
+function gsShipLength($type)
 {
-    $fleet = [
-        ['type' => 'wraith', 'length' => 3],
-        ['type' => 'barge',  'length' => 2],
-        ['type' => 'skiff',  'length' => 2],
-        ['type' => 'relic',  'length' => 1],
-        ['type' => 'relic',  'length' => 1],
-    ];
-
-    if ($boardSize >= 10) {
-        // etwas mehr Präsenz auf 10x10
-        $fleet[] = ['type' => 'wraith', 'length' => 3];
-        $fleet[] = ['type' => 'relic',  'length' => 1];
+    global $GS_SHIP_CATALOG;
+    if (isset($GS_SHIP_CATALOG[$type]["length"])) {
+        return intval($GS_SHIP_CATALOG[$type]["length"]);
     }
-
-    return $fleet;
+    return null;
 }
 
-function gsEmptyBoard($size)
+function gsEmptyBoard($size, $manifestMax)
 {
     return [
         'ships' => [],
         'shots' => [],
         'fogged' => [],
-        'manifest_left' => 2,
+        'manifest_left' => $manifestMax,
     ];
 }
 
@@ -235,12 +348,9 @@ function gsCellsFree($board, $cells)
     return true;
 }
 
-function gsPlaceShip(&$board, $fleet, $type, $pos, $dir, $size)
+function gsPlaceShip(&$board, $fleetCounts, $type, $pos, $dir, $size)
 {
-    $neededOfType = 0;
-    foreach ($fleet as $def) {
-        if ($def['type'] === $type) $neededOfType++;
-    }
+    $neededOfType = $fleetCounts[$type] ?? 0;
 
     if ($neededOfType === 0) {
         return "Unbekannter Schiffstyp.";
@@ -251,12 +361,9 @@ function gsPlaceShip(&$board, $fleet, $type, $pos, $dir, $size)
         return "Alle Schiffe dieses Typs sind bereits platziert.";
     }
 
-    $length = null;
-    foreach ($fleet as $def) {
-        if ($def['type'] === $type) {
-            $length = $def['length'];
-            break;
-        }
+    $length = gsShipLength($type);
+    if (!$length) {
+        return "Ungültige Schiffslänge.";
     }
 
     $cells = gsShipCells($pos, $dir, $length, $size);
@@ -279,9 +386,9 @@ function gsPlaceShip(&$board, $fleet, $type, $pos, $dir, $size)
     return null;
 }
 
-function gsAutoPlace(&$board, $fleet, $size, &$rng)
+function gsAutoPlace(&$board, $fleetExpanded, $fleetCounts, $size, &$rng)
 {
-    foreach ($fleet as $def) {
+    foreach ($fleetExpanded as $def) {
         $tries = 0;
         do {
             $colRange = range('A', $size === 10 ? 'J' : 'H');
@@ -289,7 +396,7 @@ function gsAutoPlace(&$board, $fleet, $size, &$rng)
             $randRow = (int) floor(gsMulberry32Next($rng) * $size) + 1;
             $dir = gsMulberry32Next($rng) > 0.5 ? 'h' : 'v';
             $pos = $randCol . $randRow;
-            $error = gsPlaceShip($board, $fleet, $def['type'], $pos, $dir, $size);
+            $error = gsPlaceShip($board, $fleetCounts, $def['type'], $pos, $dir, $size);
             $tries++;
         } while ($error && $tries < 200);
 
@@ -446,25 +553,32 @@ function gsApplyFire(&$match, $player, $pos)
 
 function gsMaybeEvent(&$match, $actor)
 {
+    $rules = $match['rules']['hauntedEvents'] ?? ['enabled' => false];
+    if (empty($rules['enabled'])) return;
     $nowTurn = $match['turn_counter'] ?? 0;
     if (($match['haunted']['last_event_turn'] ?? -1) === $nowTurn) return;
 
     $state = &$match['rng_state'];
+    $chance = isset($rules['chancePerTurn']) ? floatval($rules['chancePerTurn']) : 0.12;
     $roll = gsMulberry32Next($state);
-    if ($roll > 0.12) return; // 12% Basis
+    if ($roll > $chance) return;
 
     $target = gsOpponent($actor);
     $board = &$match['boards'][$target];
     $size = $match['board_size'];
     $events = [];
 
-    $hasManifestBudget = ($board['manifest_left'] ?? 0) > 0 && gsBoardRemaining($board) > 2;
-    $hasDecay = ($match['haunted']['last_decay_target'] ?? null) !== $target;
+    $manifestEnabled = ($rules['manifest']['enabled'] ?? true) !== false;
+    $manifestBudget = ($board['manifest_left'] ?? 0);
+    $hasManifestBudget = $manifestEnabled && $manifestBudget > 0 && gsBoardRemaining($board) > 2;
+    $cooldown = isset($rules['decay']['cooldownTurns']) ? intval($rules['decay']['cooldownTurns']) : 2;
+    $lastDecayTurn = $match['haunted']['last_decay_turn'] ?? -100;
+    $hasDecay = ($rules['decay']['enabled'] ?? true) !== false && ($nowTurn - $lastDecayTurn) >= $cooldown;
 
-    $eventFogOptions = array_values(array_diff(
-        gsAllBoardCells($size),
-        array_column($board['shots'], 'pos')
-    ));
+    $fogEnabled = ($rules['fog']['enabled'] ?? true) !== false;
+    $eventFogOptions = $fogEnabled
+        ? array_values(array_diff(gsAllBoardCells($size), array_column($board['shots'], 'pos')))
+        : [];
 
     if ($hasDecay && gsBoardRemaining($board) > 0) {
         $events[] = 'decay';
@@ -499,6 +613,7 @@ function gsMaybeEvent(&$match, $actor)
             }
             $sunk = gsShipRemaining($shipRef) === 0;
             $match['haunted']['last_decay_target'] = $target;
+            $match['haunted']['last_decay_turn'] = $nowTurn;
             gsAddLog($match, [
                 'type'   => 'decay',
                 'target' => $target,
@@ -517,6 +632,7 @@ function gsMaybeEvent(&$match, $actor)
         }
     } elseif ($pick === 'manifest') {
         $len = ($board['manifest_left'] >= 2 && gsMulberry32Next($state) > 0.5) ? 2 : 1;
+        $len = min($len, $board['manifest_left']);
         $freeCells = array_values(array_diff(
             gsAllBoardCells($size),
             array_merge(array_column($board['shots'], 'pos'), gsAllShipCells($board))
@@ -531,19 +647,24 @@ function gsMaybeEvent(&$match, $actor)
             $tries++;
             if (!$cells) continue;
             if (!gsCellsFree($board, $cells)) continue;
+            $shipType = $len === 1 ? 'wisp' : 'echo';
+            $shipLen = gsShipLength($shipType) ?? $len;
+            if ($shipLen > $board['manifest_left']) {
+                continue;
+            }
             $board['ships'][] = [
                 'id' => 'manifest-' . ($board['manifest_left']),
-                'type' => $len === 1 ? 'wisp' : 'echo',
-                'length' => $len,
+                'type' => $shipType,
+                'length' => $shipLen,
                 'cells' => $cells,
                 'hits' => []
             ];
-            $board['manifest_left'] -= $len;
+            $board['manifest_left'] -= $shipLen;
             $placed = true;
             gsAddLog($match, [
                 'type'   => 'manifest',
                 'target' => $target,
-                'length' => $len
+                'length' => $shipLen
             ]);
         }
     } elseif ($pick === 'fog') {
@@ -672,10 +793,10 @@ function gsSerializeMatch($match, $player)
     ];
 }
 
-function gsEnsureFleetComplete($board, $fleet)
+function gsEnsureFleetComplete($board, $fleetCounts)
 {
-    foreach ($fleet as $def) {
-        if (gsShipCountByType($board, $def['type']) < 1) {
+    foreach ($fleetCounts as $type => $count) {
+        if (gsShipCountByType($board, $type) < $count) {
             return false;
         }
     }
@@ -704,15 +825,15 @@ $now = time();
 // ---------------------------------------------------------
 switch ($action) {
     case 'create': {
-        $boardSize = intval($input['boardSize'] ?? 8);
-        if (!in_array($boardSize, [8, 10])) {
-            $boardSize = 8;
-        }
+        $configBoardSize = intval($GS_GAME_CONFIG['boardSize'] ?? 8);
+        $boardSize = $configBoardSize;
 
         $name = gsCleanName($input['user'] ?? '', 'Host');
         $id = gsMatchId($matches);
         $tok = gsToken();
         $seed = random_int(1000, 999999999);
+
+        $manifestMax = $GS_GAME_CONFIG['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? 2;
 
         $matches[$id] = [
             'id' => $id,
@@ -730,13 +851,17 @@ switch ($action) {
                 'B' => ['user' => null,  'token' => null, 'ready' => false],
             ],
             'boards' => [
-                'A' => gsEmptyBoard($boardSize),
-                'B' => gsEmptyBoard($boardSize)
+                'A' => gsEmptyBoard($boardSize, $manifestMax),
+                'B' => gsEmptyBoard($boardSize, $manifestMax)
             ],
             'haunted' => [
                 'last_event_turn' => -1,
-                'last_decay_target' => null
+                'last_decay_target' => null,
+                'last_decay_turn' => -100
             ],
+            'fleet_counts' => $GS_GAME_CONFIG['fleetCounts'],
+            'fleet_defs' => $GS_GAME_CONFIG['fleetExpanded'],
+            'rules' => $GS_GAME_CONFIG['rules'],
             'log' => []
         ];
 
@@ -815,13 +940,13 @@ switch ($action) {
         if (!$player) gsRespond(['ok' => false, 'error' => 'Ungültiges Token.'], 403);
         if ($match['phase'] !== 'setup') gsRespond(['ok' => false, 'error' => 'Schiffe können nur in der Setup-Phase platziert werden.'], 400);
 
-        $fleet = gsFleet($match['board_size']);
+        $fleetCounts = $match['fleet_counts'] ?? $GS_GAME_CONFIG['fleetCounts'];
         $board = &$match['boards'][$player];
         $normPos = gsParsePos($pos, $match['board_size']);
         if (!$normPos) gsRespond(['ok' => false, 'error' => 'Ungültige Position.'], 400);
         if (!in_array($dir, ['h','v'])) $dir = 'h';
 
-        $error = gsPlaceShip($board, $fleet, $ship, $normPos, $dir, $match['board_size']);
+        $error = gsPlaceShip($board, $fleetCounts, $ship, $normPos, $dir, $match['board_size']);
         if ($error) gsRespond(['ok' => false, 'error' => $error], 400);
 
         $match['updated_at'] = $now;
@@ -840,9 +965,11 @@ switch ($action) {
         if (!$player) gsRespond(['ok' => false, 'error' => 'Ungültiges Token.'], 403);
         if ($match['phase'] !== 'setup') gsRespond(['ok' => false, 'error' => 'Automatische Platzierung nur in der Setup-Phase möglich.'], 400);
 
-        $fleet = gsFleet($match['board_size']);
-        $match['boards'][$player] = gsEmptyBoard($match['board_size']);
-        $error = gsAutoPlace($match['boards'][$player], $fleet, $match['board_size'], $match['rng_state']);
+        $fleetCounts = $match['fleet_counts'] ?? $GS_GAME_CONFIG['fleetCounts'];
+        $fleetDefs = $match['fleet_defs'] ?? $GS_GAME_CONFIG['fleetExpanded'];
+        $manifestMax = $match['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? ($GS_GAME_CONFIG['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? 2);
+        $match['boards'][$player] = gsEmptyBoard($match['board_size'], $manifestMax);
+        $error = gsAutoPlace($match['boards'][$player], $fleetDefs, $fleetCounts, $match['board_size'], $match['rng_state']);
         if ($error) gsRespond(['ok' => false, 'error' => $error], 400);
 
         $match['updated_at'] = $now;
@@ -861,8 +988,8 @@ switch ($action) {
         if (!$player) gsRespond(['ok' => false, 'error' => 'Ungültiges Token.'], 403);
         if (!in_array($match['phase'], ['setup','active'])) gsRespond(['ok' => false, 'error' => 'Ready geht nur während Setup.'], 400);
 
-        $fleet = gsFleet($match['board_size']);
-        if (!gsEnsureFleetComplete($match['boards'][$player], $fleet)) {
+        $fleetCounts = $match['fleet_counts'] ?? $GS_GAME_CONFIG['fleetCounts'];
+        if (!gsEnsureFleetComplete($match['boards'][$player], $fleetCounts)) {
             gsRespond(['ok' => false, 'error' => 'Bitte platziere alle Schiffe, bevor du ready drückst.'], 400);
         }
 
@@ -963,15 +1090,17 @@ switch ($action) {
         $match['turn'] = null;
         $match['turn_counter'] = 0;
         $match['winner'] = null;
+        $manifestMax = $match['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? ($GS_GAME_CONFIG['rules']['hauntedEvents']['manifest']['maxExtraSegmentsPerPlayer'] ?? 2);
         $match['boards'] = [
-            'A' => gsEmptyBoard($match['board_size']),
-            'B' => gsEmptyBoard($match['board_size'])
+            'A' => gsEmptyBoard($match['board_size'], $manifestMax),
+            'B' => gsEmptyBoard($match['board_size'], $manifestMax)
         ];
         $match['players']['A']['ready'] = false;
         $match['players']['B']['ready'] = false;
         $match['haunted'] = [
             'last_event_turn' => -1,
-            'last_decay_target' => null
+            'last_decay_target' => null,
+            'last_decay_turn' => -100
         ];
         $match['log'] = [];
         gsAddLog($match, [

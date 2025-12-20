@@ -1,0 +1,32 @@
+{
+  "id": "relic",
+  "name": "Relic",
+  "length": 1,
+  "rarity": "rare",
+  "rules": {
+    "spawnable": true,
+    "manifestable": true,
+    "maxPerPlayer": 2
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/relic.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 1,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "solo", "col": 0 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "@",
+    "charHit": "*"
+  }
+}
