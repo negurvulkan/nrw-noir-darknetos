@@ -1,4 +1,4 @@
 {
   "version": 1,
-  "shipIds": ["wraith", "barge", "skiff", "relic", "wisp", "echo"]
+  "shipIds": ["dread", "galleon", "brig", "wraith", "barge", "skiff", "relic", "wisp", "echo"]
 }

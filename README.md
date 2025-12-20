@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.11.0
+Version 1.12.0
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -19,6 +19,10 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 - `/content/` – JSON-Content für Terminalbefehle (`index.json`, `motd.json`, etc.).
 - `/adventurebuilder/` – UI-Assets & Blockly-Glue für den Adventure Builder.
 - `/content-builder/` – PHP-Backend & JSON-Builder/API.
+
+## Neu in 1.12.0
+
+- Ghostships-Flotte mit neuen Schiffstypen und Längen: Dread (6), Galleon (5), Brig (4), Wraith (3) und Skiff (2) als Standardbesatzung.
 
 ## Neu in 1.6.0
 
