@@ -1,0 +1,15 @@
+127.0.0.1 - - [20/Dec/2025 15:18:28] "GET /darknet/games/battleship/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:28] "GET /darknet/games/battleship/main.js HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:28] "GET /darknet/games/battleship/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:28] "GET /darknet/js/games/ghostships/engine.js HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:28] "GET /darknet/content/games/battleship/ships/index.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/dread.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/galleon.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/brig.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/wraith.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/barge.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/skiff.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/relic.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/wisp.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/ships/echo.json HTTP/1.1" 200 -
+127.0.0.1 - - [20/Dec/2025 15:18:29] "GET /darknet/content/games/battleship/config.json HTTP/1.1" 200 -
