@@ -93,7 +93,7 @@ function gsRenderOwnBoard(match) {
   const fogged = new Set(own.fogged || []);
 
   return gsRenderGrid(size, pos => {
-    if (hitCells.has(pos)) return "X";
+    if (hitCells.has(pos)) return "=";
     if (shipCells.has(pos)) return "#";
     if (fogged.has(pos)) return "?";
     return "·";
