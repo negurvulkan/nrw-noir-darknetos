@@ -115,6 +115,23 @@ function formatLogEntry(entry) {
   }
 }
 
+function applyShipSprite(btn, ship, pos, isHit) {
+  const orientation = detectOrientation(ship);
+  btn.dataset.ship = ship.type;
+  btn.dataset.orientation = orientation;
+  btn.dataset.frame = isHit ? "hit" : "ok";
+  const spriteFrame = getSpriteFrame(ship, pos, orientation, isHit);
+  if (spriteFrame) {
+    btn.dataset.sprite = spriteFrame.sprite;
+    btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
+    btn.style.setProperty("--sprite-bg-width", `${spriteFrame.bgWidth}px`);
+    btn.style.setProperty("--sprite-bg-height", `${spriteFrame.bgHeight}px`);
+    btn.style.setProperty("--sprite-frame-x", `${spriteFrame.posX}px`);
+    btn.style.setProperty("--sprite-frame-y", `${spriteFrame.posY}px`);
+    btn.style.setProperty("--sprite-size", `${spriteFrame.tile}px`);
+  }
+}
+
 function renderRadar(match) {
   const size = match.boardSize;
   const radar = match.boards?.radar || { hits: [], misses: [], pending: [], fogged: [] };
@@ -122,6 +139,16 @@ function renderRadar(match) {
   const misses = new Set(radar.misses || []);
   const pending = new Set(radar.pending || []);
   const fogged = new Set(radar.fogged || []);
+
+  const shipMap = {};
+  if (Array.isArray(radar.ships)) {
+    radar.ships.forEach(ship => {
+      (ship.cells || []).forEach(cell => {
+        shipMap[cell] = ship;
+      });
+    });
+  }
+
   return createBoardGrid(size, pos => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -133,6 +160,13 @@ function renderRadar(match) {
     if (pending.has(pos)) btn.classList.add("pending");
     if (fogged.has(pos)) btn.classList.add("fog");
     if (state.revealCells.has(`radar-${pos}`)) btn.classList.add("reveal");
+
+    const ship = shipMap[pos];
+    if (ship) {
+      btn.classList.add("ship");
+      if (hits.has(pos)) btn.classList.add("hit");
+      applyShipSprite(btn, ship, pos, hits.has(pos));
+    }
 
     attachCellAction(btn, () => fireAt(pos));
     return btn;
@@ -171,21 +205,7 @@ function renderOwnBoard(match) {
     if (state.manifestCells.has(pos)) btn.classList.add("manifest");
     if (state.revealCells.has(`own-${pos}`)) btn.classList.add("reveal");
     if (cell.ships?.length) {
-      const ship = cell.ships[0];
-      const orientation = detectOrientation(ship);
-      btn.dataset.ship = ship.type;
-      btn.dataset.orientation = orientation;
-      btn.dataset.frame = cell.hit ? "hit" : "ok";
-      const spriteFrame = getSpriteFrame(ship, pos, orientation, !!cell.hit);
-      if (spriteFrame) {
-        btn.dataset.sprite = spriteFrame.sprite;
-        btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
-        btn.style.setProperty("--sprite-bg-width", `${spriteFrame.bgWidth}px`);
-        btn.style.setProperty("--sprite-bg-height", `${spriteFrame.bgHeight}px`);
-        btn.style.setProperty("--sprite-frame-x", `${spriteFrame.posX}px`);
-        btn.style.setProperty("--sprite-frame-y", `${spriteFrame.posY}px`);
-        btn.style.setProperty("--sprite-size", `${spriteFrame.tile}px`);
-      }
+      applyShipSprite(btn, cell.ships[0], pos, !!cell.hit);
     }
 
     attachCellAction(btn, () => placeAt(pos));

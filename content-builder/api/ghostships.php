@@ -425,6 +425,9 @@ function gsPlayerByToken($match, $token)
             return $p;
         }
     }
+    if (isset($match['spectators'][$token])) {
+        return 'spectator';
+    }
     return null;
 }
 
@@ -734,14 +737,17 @@ function gsAllBoardCells($size)
 
 function gsSerializeRadar($match, $player)
 {
-    $op = gsOpponent($player);
+    $isSpectator = ($player === 'spectator');
+    $op = $isSpectator ? 'B' : gsOpponent($player);
     $board = $match['boards'][$op];
     $hits = [];
     $misses = [];
     $pending = [];
 
+    $viewer = $isSpectator ? 'A' : $player;
+
     foreach ($board['shots'] as $shot) {
-        if (($shot['by'] ?? '') !== $player) continue;
+        if (($shot['by'] ?? '') !== $viewer) continue;
         if (!empty($shot['revealed'])) {
             if (($shot['result'] ?? '') === 'miss') {
                 $misses[] = $shot['pos'];
@@ -753,11 +759,39 @@ function gsSerializeRadar($match, $player)
         }
     }
 
+    $ships = [];
+    $revealAll = $match['phase'] === 'finished' || $isSpectator;
+
+    if ($revealAll) {
+        foreach ($board['ships'] as $ship) {
+            $ships[] = [
+                'id'     => $ship['id'],
+                'type'   => $ship['type'],
+                'length' => $ship['length'],
+                'cells'  => $ship['cells'],
+                'hits'   => array_values(array_unique($ship['hits'])),
+            ];
+        }
+    } else {
+        foreach ($board['ships'] as $ship) {
+            if (gsShipRemaining($ship) === 0) {
+                 $ships[] = [
+                    'id'     => $ship['id'],
+                    'type'   => $ship['type'],
+                    'length' => $ship['length'],
+                    'cells'  => $ship['cells'],
+                    'hits'   => array_values(array_unique($ship['hits'])),
+                ];
+            }
+        }
+    }
+
     return [
         'hits'   => array_values(array_unique($hits)),
         'misses' => array_values(array_unique($misses)),
         'pending'=> array_values(array_unique($pending)),
         'fogged' => array_values(array_unique($board['fogged'])),
+        'ships'  => $ships
     ];
 }
 
@@ -784,28 +818,32 @@ function gsSerializeOwnBoard($board)
 
 function gsSerializeMatch($match, $player)
 {
-    $op = gsOpponent($player);
+    $isSpectator = ($player === 'spectator');
+    $op = $isSpectator ? 'B' : gsOpponent($player);
+    $you = $isSpectator ? 'A' : $player;
+
     return [
         'id' => $match['id'],
         'boardSize' => $match['board_size'],
         'seed' => $match['seed'],
         'phase' => $match['phase'],
         'turn' => $match['turn'],
-        'you'  => $player,
+        'you'  => $isSpectator ? null : $player,
+        'spectator' => $isSpectator,
         'opponent' => $op,
         'players' => [
-            'you' => $match['players'][$player] ?? null,
+            'you' => $match['players'][$you] ?? null,
             'opponent' => $match['players'][$op] ?? null
         ],
         'ready' => [
-            'you' => $match['players'][$player]['ready'] ?? false,
+            'you' => $match['players'][$you]['ready'] ?? false,
             'opponent' => $match['players'][$op]['ready'] ?? false,
         ],
         'winner' => $match['winner'] ?? null,
         'turnCounter' => $match['turn_counter'] ?? 0,
         'boards' => [
             'radar' => gsSerializeRadar($match, $player),
-            'own'   => gsSerializeOwnBoard($match['boards'][$player])
+            'own'   => gsSerializeOwnBoard($match['boards'][$you])
         ],
         'log' => array_values($match['log'] ?? [])
     ];
@@ -824,24 +862,25 @@ function gsEnsureFleetComplete($board, $fleetCounts)
 // ---------------------------------------------------------
 // Input
 // ---------------------------------------------------------
-$input = json_decode(file_get_contents("php://input"), true);
-if (!is_array($input)) {
-    $input = [];
-}
+if (basename(__FILE__) == basename($_SERVER["SCRIPT_FILENAME"])) {
+    $input = json_decode(file_get_contents("php://input"), true);
+    if (!is_array($input)) {
+        $input = [];
+    }
 
-$action = $input['action'] ?? $_POST['action'] ?? $_GET['action'] ?? null;
-if (!$action) {
-    gsRespond(["ok" => false, "error" => "Keine Aktion angegeben."], 400);
-}
+    $action = $input['action'] ?? $_POST['action'] ?? $_GET['action'] ?? null;
+    if (!$action) {
+        gsRespond(["ok" => false, "error" => "Keine Aktion angegeben."], 400);
+    }
 
-$matches = gsLoadMatches($storeFile);
-$dirty = gsCleanupMatches($matches);
-$now = time();
+    $matches = gsLoadMatches($storeFile);
+    $dirty = gsCleanupMatches($matches);
+    $now = time();
 
-// ---------------------------------------------------------
-// Actions
-// ---------------------------------------------------------
-switch ($action) {
+    // ---------------------------------------------------------
+    // Actions
+    // ---------------------------------------------------------
+    switch ($action) {
     case 'create': {
         $configBoardSize = intval($GS_GAME_CONFIG['boardSize'] ?? 8);
         $boardSize = $configBoardSize;
@@ -1141,7 +1180,8 @@ switch ($action) {
         break;
     }
 
-    default:
-        if ($dirty) gsSaveMatches($storeFile, $matches);
-        gsRespond(['ok' => false, 'error' => 'Unbekannte Aktion.'], 400);
+        default:
+            if ($dirty) gsSaveMatches($storeFile, $matches);
+            gsRespond(['ok' => false, 'error' => 'Unbekannte Aktion.'], 400);
+    }
 }
