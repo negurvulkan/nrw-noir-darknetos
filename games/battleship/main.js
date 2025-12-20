@@ -7,7 +7,8 @@ const state = {
   decayCells: new Set(),
   revealCells: new Set(),
   lastFog: new Set(),
-  spriteMeta: null
+  shipCatalog: null,
+  matchConfig: null
 };
 
 const els = {
@@ -37,7 +38,6 @@ const els = {
 };
 
 const STORAGE_KEY = "ghostships_gui_name";
-const SPRITE_META_URL = GhostshipsEngine.SPRITE_META_URL;
 
 function userLabel() {
   const base = (els.name.value || "").trim() || "user";
@@ -179,13 +179,15 @@ function renderOwnBoard(match) {
         btn.dataset.ship = ship.type;
         btn.dataset.orientation = orientation;
         btn.dataset.frame = cell.hit ? "hit" : "ok";
-        const spriteFrame = getSpriteFrame(ship, orientation, !!cell.hit);
+        const spriteFrame = getSpriteFrame(ship, pos, orientation, !!cell.hit);
         if (spriteFrame) {
           btn.dataset.sprite = spriteFrame.sprite;
           btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
-          btn.style.setProperty("--sprite-frame-index", spriteFrame.index);
-          btn.style.setProperty("--sprite-frame-count", spriteFrame.count);
-          btn.style.setProperty("--sprite-size", `${spriteFrame.size}px`);
+          btn.style.setProperty("--sprite-bg-width", `${spriteFrame.bgWidth}px`);
+          btn.style.setProperty("--sprite-bg-height", `${spriteFrame.bgHeight}px`);
+          btn.style.setProperty("--sprite-frame-x", `${spriteFrame.posX}px`);
+          btn.style.setProperty("--sprite-frame-y", `${spriteFrame.posY}px`);
+          btn.style.setProperty("--sprite-size", `${spriteFrame.tile}px`);
         }
       }
 
@@ -303,37 +305,41 @@ function detectOrientation(ship) {
   return first[0] === second[0] ? "v" : "h";
 }
 
-function getSpriteFrame(ship, orientation, isHit) {
-  const meta = state.spriteMeta?.get(ship.type);
-  if (!meta?.frames || !meta.sprite) return null;
-  const framesForOrientation = meta.frames?.[orientation] || {};
-  const frameKey = isHit ? "hit" : "ok";
-  if (typeof framesForOrientation[frameKey] !== "number") return null;
-  const frameValues = Object.values(meta.frames)
-    .flatMap(entry => Object.values(entry))
-    .filter(v => typeof v === "number");
-  const frameCount = frameValues.length ? Math.max(...frameValues) + 1 : 1;
+function getShipDefinition(shipId) {
+  return state.shipCatalog?.get(shipId) || null;
+}
+
+function getSpriteFrame(ship, cellPos, orientation, isHit) {
+  const def = getShipDefinition(ship.type);
+  const sprite = def?.sprite;
+  if (!sprite?.url) return null;
+  const tile = sprite.tileSize || 32;
+  const row = isHit ? (sprite.states?.hit?.row ?? 1) : (sprite.states?.ok?.row ?? 0);
+  const segmentIndex = (ship.cells || []).indexOf(cellPos);
+  const seg = sprite.segments?.[segmentIndex] || { col: segmentIndex };
+  const col = typeof seg.col === "number" ? seg.col : segmentIndex;
   return {
-    sprite: meta.sprite,
-    index: framesForOrientation[frameKey],
-    count: frameCount,
-    size: meta.size || 32
+    sprite: sprite.url,
+    bgWidth: (sprite.cols || (def?.length || 1)) * tile,
+    bgHeight: (sprite.rows || 2) * tile,
+    posX: col * tile,
+    posY: row * tile,
+    tile
   };
 }
 
-async function loadSpriteMeta() {
-  try {
-    const res = await fetch(SPRITE_META_URL);
-    const data = await res.json();
-    const map = new Map();
-    (data || []).forEach(entry => map.set(entry.id, entry));
-    state.spriteMeta = map;
-    const match = client.getState().match;
-    if (match) {
-      render(match, match, { logs: [] });
-    }
-  } catch (_) {
-    state.spriteMeta = null;
+async function loadShipData() {
+  const [catalog, config] = await Promise.all([
+    GhostshipsEngine.loadBattleshipCatalog(),
+    GhostshipsEngine.loadBattleshipConfig()
+  ]);
+  state.shipCatalog = catalog;
+  state.matchConfig = config;
+  syncShipSelectOptions();
+  syncBoardSize(config.boardSize);
+  const match = client.getState().match;
+  if (match) {
+    render(match, match, { logs: [] });
   }
 }
 
@@ -378,7 +384,7 @@ async function placeAt(pos) {
 
 async function handleCreate() {
   try {
-    const size = parseInt(els.size.value, 10) || 8;
+    const size = state.matchConfig?.boardSize || parseInt(els.size.value, 10) || 8;
     const match = await client.createMatch(size, userLabel());
     els.match.value = match?.id || "";
     setStatus(`Match ${match?.id} erstellt.`);
@@ -500,6 +506,36 @@ function bindEvents() {
   els.name.addEventListener("change", saveName);
 }
 
+function syncShipSelectOptions() {
+  if (!state.matchConfig || !state.shipCatalog) return;
+  els.shipSelect.innerHTML = "";
+  state.matchConfig.fleet.forEach(entry => {
+    const def = getShipDefinition(entry.shipId);
+    const opt = document.createElement("option");
+    opt.value = entry.shipId;
+    const labelName = def?.name || entry.shipId;
+    const suffix = entry.count > 1 ? ` ×${entry.count}` : "";
+    opt.textContent = `${labelName} (${entry.length})${suffix}`;
+    els.shipSelect.appendChild(opt);
+  });
+  if (els.shipSelect.options.length) {
+    els.shipSelect.value = els.shipSelect.options[0].value;
+  }
+}
+
+function syncBoardSize(size) {
+  if (!els.size) return;
+  const existing = [...els.size.options].some(opt => opt.value === String(size));
+  if (!existing) {
+    const opt = document.createElement("option");
+    opt.value = String(size);
+    opt.textContent = `${size}×${size}`;
+    els.size.appendChild(opt);
+  }
+  els.size.value = String(size);
+  els.size.disabled = true;
+}
+
 client.onState(({ match, prev, delta }) => {
   if (!match) return;
   const prevPhase = prev?.phase;
@@ -512,6 +548,6 @@ client.onState(({ match, prev, delta }) => {
 loadName();
 bindEvents();
 initMatchFromQuery();
-loadSpriteMeta();
+loadShipData().catch(() => setStatus("Schiffsdaten konnten nicht geladen werden."));
 
 setStatus("Bereit. Erstelle oder trete einem Match bei.");

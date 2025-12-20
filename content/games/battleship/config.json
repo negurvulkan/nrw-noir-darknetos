@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "boardSize": 8,
+  "fleet": [
+    { "shipId": "wraith", "count": 1 },
+    { "shipId": "barge", "count": 1 },
+    { "shipId": "skiff", "count": 1 },
+    { "shipId": "relic", "count": 2 }
+  ],
+  "rules": {
+    "allowAdjacency": true,
+    "hauntedEvents": {
+      "enabled": true,
+      "chancePerTurn": 0.12,
+      "manifest": { "enabled": true, "maxExtraSegmentsPerPlayer": 2 },
+      "decay": { "enabled": true, "cooldownTurns": 2 },
+      "fog": { "enabled": true }
+    }
+  }
+}

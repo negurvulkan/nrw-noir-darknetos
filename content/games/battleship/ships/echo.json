@@ -1,0 +1,33 @@
+{
+  "id": "echo",
+  "name": "Echo",
+  "length": 2,
+  "rarity": "mythic",
+  "rules": {
+    "spawnable": false,
+    "manifestable": true,
+    "maxPerPlayer": 2
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/echo.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 2,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "front", "col": 0 },
+      { "name": "rear", "col": 1 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "~",
+    "charHit": "x"
+  }
+}
