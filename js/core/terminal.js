@@ -18,6 +18,14 @@ if (typeof window !== "undefined") {
   window.commandRouter = window.commandRouter || {
     registerCommand: (name, handler) => window.registerCommand(name, handler)
   };
+
+  // Interceptoren für Inputs (für aktive Spiele, die alles abfangen wollen)
+  window.INPUT_INTERCEPTORS = [];
+  window.registerInputInterceptor = function(fn) {
+    if (typeof fn === "function") {
+      window.INPUT_INTERCEPTORS.push(fn);
+    }
+  };
 }
 
 // TAB-Autocomplete
@@ -328,27 +336,17 @@ async function handleCommand(raw) {
   }
 
   // ---------------------------------------------------------
-  // TicTacToe: Schnellzug (nur eine Zahl 1–9 eingeben)
+  // Input Interceptors (Games etc.)
   // ---------------------------------------------------------
-  if (typeof TTT_ACTIVE !== "undefined" &&
-      TTT_ACTIVE &&
-      parts.length === 1 &&
-      /^[1-9]$/.test(base) &&
-      typeof tttHandleMove === "function") {
-    await tttHandleMove(base);
-    return;
-  }
-
-  // ---------------------------------------------------------
-  // Ghostships: Quickshot (Koordinate ohne Präfix)
-  // ---------------------------------------------------------
-  if (typeof GS_STATE !== "undefined" &&
-      GS_STATE.active &&
-      parts.length === 1 &&
-      /^[A-Ja-j][0-9]{1,2}$/.test(base) &&
-      typeof gsHandleQuickshot === "function") {
-    const fired = await gsHandleQuickshot(base.toUpperCase());
-    if (fired) return;
+  if (window.INPUT_INTERCEPTORS && window.INPUT_INTERCEPTORS.length) {
+    for (const interceptor of window.INPUT_INTERCEPTORS) {
+      try {
+        const handled = await interceptor(cmd, parts, base);
+        if (handled === true) return;
+      } catch (err) {
+        console.error("Interceptor error:", err);
+      }
+    }
   }
 
   // ---------------------------------------------------------

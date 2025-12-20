@@ -2,9 +2,9 @@
 // MINIGAME: Ghostships – Multiplayer Battleship mit Haunted-Events
 // ---------------------------------------------------------
 
-const GS_CLIENT = typeof GhostshipsEngine !== "undefined"
-  ? GhostshipsEngine.createClient()
-  : null;
+import { GhostshipsEngine } from "./engine.js";
+
+const GS_CLIENT = GhostshipsEngine.createClient();
 
 let GS_STATE = {
   active: false,
@@ -466,4 +466,21 @@ if (typeof registerGame === "function") {
 
 if (typeof registerCommand === "function") {
   registerCommand("gs", gsHandleCommand);
+}
+
+// ---------------------------------------------------------
+// Input Interceptor für Quickshot
+// ---------------------------------------------------------
+if (typeof window.registerInputInterceptor === "function") {
+  window.registerInputInterceptor(async (cmd, parts, base) => {
+    // Wenn Match nicht aktiv oder Kommando zu komplex, ignorieren
+    if (!GS_STATE.active) return false;
+    if (parts.length !== 1) return false;
+
+    // A1..J10
+    if (/^[A-Ja-j][0-9]{1,2}$/.test(base)) {
+      return await gsHandleQuickshot(base.toUpperCase());
+    }
+    return false;
+  });
 }
