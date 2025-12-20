@@ -443,14 +443,15 @@ function gsBoardRemaining($board)
     return $rem;
 }
 
-function gsShipByCell(&$board, $pos)
+function &gsShipByCell(&$board, $pos)
 {
     foreach ($board['ships'] as &$ship) {
         if (in_array($pos, $ship['cells'], true)) {
             return $ship;
         }
     }
-    return null;
+    $null = null;
+    return $null;
 }
 
 function gsAddLog(&$match, $entry)
@@ -509,7 +510,7 @@ function gsApplyFire(&$match, $player, $pos)
         array_splice($board['fogged'], $fogIdx, 1);
     }
 
-    $ship = gsShipByCell($board, $pos);
+    $ship = &gsShipByCell($board, $pos);
     $result = 'miss';
     $sunk = false;
 
