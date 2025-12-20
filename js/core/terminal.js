@@ -396,7 +396,7 @@ async function handleCommand(raw) {
       "  game / games      - Game Hub",
       "",
       "",
-      ...Object.keys(FILE_INDEX).map(k => "  " + k),
+      // ...Object.keys(FILE_INDEX).map(k => "  " + k),
       ""
     ]);
     return;
