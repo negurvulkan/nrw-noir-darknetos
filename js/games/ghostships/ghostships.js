@@ -2,28 +2,31 @@
 // MINIGAME: Ghostships – Multiplayer Battleship mit Haunted-Events
 // ---------------------------------------------------------
 
-const GS_API = "content-builder/api/ghostships.php";
+const GS_CLIENT = typeof GhostshipsEngine !== "undefined"
+  ? GhostshipsEngine.createClient()
+  : null;
+
 let GS_STATE = {
   active: false,
-  matchId: null,
-  token: null,
-  pollTimer: null,
-  you: null,
   lastLog: 0
 };
 
 let GS_FLAVOR = null;
 
+function gsEnsureClient() {
+  if (!GS_CLIENT) {
+    throw new Error("Ghostships Engine nicht geladen.");
+  }
+  return GS_CLIENT;
+}
+
 function gsResetState() {
-  if (GS_STATE.pollTimer) {
-    clearInterval(GS_STATE.pollTimer);
+  const client = GS_CLIENT;
+  if (client) {
+    client.reset();
   }
   GS_STATE = {
     active: false,
-    matchId: null,
-    token: null,
-    pollTimer: null,
-    you: null,
     lastLog: 0
   };
 }
@@ -159,59 +162,29 @@ function gsPrintLog(match, limit = 10) {
   printLines(lines);
 }
 
-async function gsApiRequest(action, payload = {}) {
-  const res = await fetch(GS_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload })
-  });
-  let data = null;
-  try {
-    data = await res.json();
-  } catch (e) {
-    throw new Error("Ungültige Antwort vom Ghostships-Server.");
-  }
-  if (!res.ok || data?.ok === false) {
-    throw new Error(data?.error || `Serverfehler (${res.status})`);
-  }
-  return data;
-}
-
 function gsIsMyTurn(match) {
   return match.phase === "active" && match.turn === match.you;
 }
 
-async function gsStartPolling() {
-  if (GS_STATE.pollTimer) clearInterval(GS_STATE.pollTimer);
-  GS_STATE.pollTimer = setInterval(async () => {
-    try {
-      await gsFetchState({ announce: false });
-    } catch (e) {
-      console.warn("Ghostships poll error:", e.message);
-    }
-  }, 8000);
-}
-
 async function gsFetchState({ announce = true } = {}) {
-  if (!GS_STATE.matchId || !GS_STATE.token) return null;
-  const res = await gsApiRequest("state", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token
-  });
-  if (!res?.match) return null;
-  const prevTurn = GS_STATE.turn;
-  const match = res.match;
+  const client = gsEnsureClient();
+  if (!client.hasSession()) return null;
+  const prevState = client.getState();
+  const lastSeenLog = prevState.lastLogTs || 0;
+  const match = await client.fetchState();
+  if (!match) return null;
+
   GS_STATE.active = ["setup", "active"].includes(match.phase);
-  GS_STATE.turn = match.turn;
-  GS_STATE.you = match.you;
-  GS_STATE.matchId = match.id;
+  GS_STATE.lastLog = match.log?.length || 0;
+
   if (announce) {
     gsPrintMatchStatus(match);
   }
   if (announce || gsIsMyTurn(match)) {
     gsPrintBoards(match);
   }
-  if (match.log?.length) {
+  const newLogs = (match.log || []).filter(entry => (entry.ts || 0) > lastSeenLog);
+  if (match.log?.length && (announce || newLogs.length)) {
     gsPrintLog(match, 6);
   }
   if (match.phase === "finished") {
@@ -221,111 +194,87 @@ async function gsFetchState({ announce = true } = {}) {
 }
 
 async function gsCreate(size) {
+  const client = gsEnsureClient();
   const user = getUserName();
-  const res = await gsApiRequest("create", { boardSize: size || 8, user });
+  const match = await client.createMatch(size || 8, user);
   GS_STATE.active = true;
-  GS_STATE.matchId = res.match?.id;
-  GS_STATE.token = res.token;
-  GS_STATE.you = res.match?.you;
   printLines([
-    `Ghostships-Match erstellt: ${GS_STATE.matchId}`,
+    `Ghostships-Match erstellt: ${match?.id || "(?)"}`,
     "Lade Freund:innen ein mit: gs invite <user>",
     ""
   ], "success");
   await gsFetchState();
-  await gsStartPolling();
 }
 
 async function gsJoin(matchId) {
+  const client = gsEnsureClient();
   const user = getUserName();
-  const res = await gsApiRequest("join", { matchId, user });
+  const match = await client.joinMatch(matchId, user);
   GS_STATE.active = true;
-  GS_STATE.matchId = res.match?.id || matchId;
-  GS_STATE.token = res.token;
-  GS_STATE.you = res.match?.you;
-  printLines([`Match ${GS_STATE.matchId} beigetreten.`, ""], "success");
+  printLines([`Match ${match?.id || matchId} beigetreten.`, ""], "success");
   await gsFetchState();
-  await gsStartPolling();
 }
 
 async function gsInvite(user) {
-  if (!GS_STATE.matchId) {
+  const state = GS_CLIENT?.getState();
+  if (!state?.matchId) {
     printLines(["Kein aktives Match. Erstelle eines mit 'gs create'.", ""], "error");
     return;
   }
   if (typeof chatSendMessage === "function") {
-    await chatSendMessage(user, `Join meine Ghostships-Lobby: ${GS_STATE.matchId}`);
+    await chatSendMessage(user, `Join meine Ghostships-Lobby: ${state.matchId}`);
   } else {
     printLines(["Chat-Modul nicht geladen, Einladung nur manuell möglich.", ""], "dim");
   }
 }
 
 async function gsPlace(ship, pos, dir) {
-  if (!GS_STATE.matchId) {
+  const client = gsEnsureClient();
+  if (!client.hasSession()) {
     printLines(["Kein Match aktiv. 'gs create' oder 'gs join <ID>'.", ""], "error");
     return;
   }
-  const res = await gsApiRequest("place", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token,
-    ship,
-    pos,
-    dir: dir || "h"
-  });
+  await client.placeShip(ship, pos, dir || "h");
   printLines([`Schiff ${ship} gesetzt bei ${pos} (${dir || "h"}).`, ""], "success");
-  await gsFetchState();
+  await gsFetchState({ announce: false });
 }
 
 async function gsAuto() {
-  const res = await gsApiRequest("auto", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token
-  });
+  await gsEnsureClient().autoPlace();
   printLines(["Automatische Platzierung abgeschlossen.", ""], "success");
-  await gsFetchState();
+  await gsFetchState({ announce: false });
 }
 
 async function gsReady() {
-  const res = await gsApiRequest("ready", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token
-  });
+  await gsEnsureClient().setReady();
   printLines(["Du bist bereit. Warte auf den Gegner…", ""], "success");
-  await gsFetchState();
+  await gsFetchState({ announce: false });
 }
 
 async function gsFire(pos) {
-  const res = await gsApiRequest("fire", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token,
-    pos
-  });
+  await gsEnsureClient().fire(pos);
   printLines([`Feuer auf ${pos} abgegeben.`, ""], "success");
-  await gsFetchState();
+  await gsFetchState({ announce: false });
 }
 
 async function gsLeave() {
-  if (!GS_STATE.matchId) {
+  const client = gsEnsureClient();
+  if (!client.hasSession()) {
     printLines(["Kein Match aktiv.", ""], "dim");
     return;
   }
-  await gsApiRequest("leave", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token
-  });
+  await client.leaveMatch();
   gsResetState();
   printLines(["Match verlassen.", ""], "dim");
 }
 
 async function gsRematch() {
-  if (!GS_STATE.matchId) {
+  const client = gsEnsureClient();
+  if (!client.hasSession()) {
     printLines(["Kein beendetes Match vorhanden.", ""], "error");
     return;
   }
-  const res = await gsApiRequest("rematch", {
-    matchId: GS_STATE.matchId,
-    token: GS_STATE.token
-  });
+  await client.rematch();
   printLines(["Rematch gestartet. Platziere deine Flotte.", ""], "success");
   await gsFetchState();
 }
@@ -449,6 +398,22 @@ async function gsHandleQuickshot(coord) {
 // ---------------------------------------------------------
 // Registrierung im Game Hub
 // ---------------------------------------------------------
+if (GS_CLIENT) {
+  GS_CLIENT.onState(({ match, prev }) => {
+    if (!match) return;
+    const justFinished = prev?.phase !== "finished" && match.phase === "finished";
+    const wasTurn = prev?.turn && prev.turn === prev.you;
+    const nowTurn = gsIsMyTurn(match);
+    if (justFinished || (!wasTurn && nowTurn)) {
+      gsPrintMatchStatus(match);
+      gsPrintBoards(match);
+      if (match.log?.length) {
+        gsPrintLog(match, 6);
+      }
+    }
+  });
+}
+
 if (typeof registerGame === "function") {
   registerGame("gs", {
     name: "Ghostships",

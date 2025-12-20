@@ -1,0 +1,38 @@
+[
+  {
+    "id": "wraith",
+    "length": 3,
+    "sprite": "games/ghostships/sprites/wraith.png",
+    "frames": {
+      "h": { "ok": 0, "hit": 1 },
+      "v": { "ok": 2, "hit": 3 }
+    }
+  },
+  {
+    "id": "barge",
+    "length": 2,
+    "sprite": "games/ghostships/sprites/barge.png",
+    "frames": {
+      "h": { "ok": 0, "hit": 1 },
+      "v": { "ok": 2, "hit": 3 }
+    }
+  },
+  {
+    "id": "skiff",
+    "length": 2,
+    "sprite": "games/ghostships/sprites/skiff.png",
+    "frames": {
+      "h": { "ok": 0, "hit": 1 },
+      "v": { "ok": 2, "hit": 3 }
+    }
+  },
+  {
+    "id": "relic",
+    "length": 1,
+    "sprite": "games/ghostships/sprites/relic.png",
+    "frames": {
+      "h": { "ok": 0, "hit": 1 },
+      "v": { "ok": 0, "hit": 1 }
+    }
+  }
+]

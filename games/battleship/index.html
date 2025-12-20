@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <base href="/darknet/">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NRW Noir · Ghostships GUI</title>
+  <link rel="stylesheet" href="./games/battleship/style.css">
+</head>
+<body class="crt-off">
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <div class="title">NRW Noir</div>
+          <div class="subtitle">Ghostships · GUI</div>
+        </div>
+      </div>
+      <div class="toggles">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-crt">
+          <span>Retro CRT</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-spectate">
+          <span>Spectator-Modus</span>
+        </label>
+      </div>
+    </header>
+
+    <section class="controls">
+      <div class="field">
+        <label for="input-name">Name</label>
+        <input id="input-name" placeholder="dein Name" maxlength="32">
+        <small>Im Chat erscheinst du als „(GUI)“</small>
+      </div>
+      <div class="field duo">
+        <div>
+          <label for="select-size">Board</label>
+          <select id="select-size">
+            <option value="8">8×8</option>
+            <option value="10">10×10</option>
+          </select>
+        </div>
+        <button id="btn-create" class="btn primary">Match erstellen</button>
+      </div>
+      <div class="field duo">
+        <div>
+          <label for="input-match">Match-ID</label>
+          <input id="input-match" placeholder="GS-XXXXXX" autocapitalize="characters">
+        </div>
+        <button id="btn-join" class="btn">Beitreten</button>
+      </div>
+      <div class="field trio">
+        <button id="btn-copy-id" class="btn ghost" disabled>Match-ID kopieren</button>
+        <button id="btn-rematch" class="btn ghost" disabled>Rematch</button>
+        <button id="btn-leave" class="btn danger ghost" disabled>Match verlassen</button>
+      </div>
+      <div class="field info" id="status-text">Bereit. Erstelle oder trete einem Match bei.</div>
+    </section>
+
+    <section class="layout">
+      <div class="board-card" id="radar-card">
+        <div class="card-head">
+          <div>
+            <div class="label">Gegner-Radar</div>
+            <div class="sub">Tippe oder nutze Enter/Space zum Feuern</div>
+          </div>
+          <div class="pill" id="turn-indicator">Wartet…</div>
+        </div>
+        <div class="board-wrap" id="radar-board"></div>
+      </div>
+
+      <div class="board-card" id="fleet-card">
+        <div class="card-head">
+          <div>
+            <div class="label">Eigene Schiffe</div>
+            <div class="sub">Autoset oder manuelles Platzieren</div>
+          </div>
+          <div class="pill alt" id="ready-indicator">Setup</div>
+        </div>
+        <div class="board-wrap small" id="own-board"></div>
+        <div class="placement">
+          <div class="placement-row">
+            <label for="select-ship">Schiff</label>
+            <select id="select-ship">
+              <option value="wraith">Wraith (3)</option>
+              <option value="barge">Barge (2)</option>
+              <option value="skiff">Skiff (2)</option>
+              <option value="relic">Relic (1)</option>
+            </select>
+          </div>
+          <div class="placement-row">
+            <label for="select-dir">Richtung</label>
+            <select id="select-dir">
+              <option value="h">Horizontal</option>
+              <option value="v">Vertikal</option>
+            </select>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-place">
+            <span>Platziermodus aktiv</span>
+          </label>
+          <div class="placement-actions">
+            <button id="btn-auto" class="btn ghost">Auto-Platzierung</button>
+            <button id="btn-ready" class="btn primary">Bereit</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="log-card">
+        <div class="card-head">
+          <div>
+            <div class="label">Log & Ereignisse</div>
+            <div class="sub">Letzte 5 Einträge</div>
+          </div>
+        </div>
+        <div id="log-list" class="log-list"></div>
+        <div class="actions">
+          <button id="btn-refresh" class="btn ghost">Status abrufen</button>
+          <button id="btn-copy-link" class="btn ghost">Match-Link kopieren</button>
+        </div>
+        <div class="spectator-note">Spectator-Modus: Radar ist read-only, Animationen bleiben aktiv.</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="./js/games/ghostships/engine.js"></script>
+  <script type="module" src="./games/battleship/main.js"></script>
+</body>
+</html>
