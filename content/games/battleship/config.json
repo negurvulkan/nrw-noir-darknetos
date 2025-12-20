@@ -2,10 +2,11 @@
   "version": 1,
   "boardSize": 8,
   "fleet": [
+    { "shipId": "dread", "count": 1 },
+    { "shipId": "galleon", "count": 1 },
+    { "shipId": "brig", "count": 1 },
     { "shipId": "wraith", "count": 1 },
-    { "shipId": "barge", "count": 1 },
-    { "shipId": "skiff", "count": 1 },
-    { "shipId": "relic", "count": 2 }
+    { "shipId": "skiff", "count": 1 }
   ],
   "rules": {
     "allowAdjacency": true,

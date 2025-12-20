@@ -1,0 +1,35 @@
+{
+  "id": "brig",
+  "name": "Brig",
+  "length": 4,
+  "rarity": "uncommon",
+  "rules": {
+    "spawnable": true,
+    "manifestable": false,
+    "maxPerPlayer": 1
+  },
+  "sprite": {
+    "type": "spritesheet",
+    "url": "/darknet/games/battleship/assets/sprites/brig.png",
+    "tileSize": 32,
+    "rows": 2,
+    "cols": 4,
+    "states": {
+      "ok": { "row": 0 },
+      "hit": { "row": 1 }
+    },
+    "segments": [
+      { "name": "front", "col": 0 },
+      { "name": "mid-1", "col": 1 },
+      { "name": "mid-2", "col": 2 },
+      { "name": "rear", "col": 3 }
+    ],
+    "rotation": {
+      "verticalMethod": "cssRotate90"
+    }
+  },
+  "terminal": {
+    "charOk": "#",
+    "charHit": "X"
+  }
+}
