@@ -175,13 +175,17 @@ function renderOwnBoard(match) {
       if (state.revealCells.has(`own-${pos}`)) btn.classList.add("reveal");
       if (cell.ships?.length) {
         const ship = cell.ships[0];
-        const meta = state.spriteMeta?.get(ship.type);
         const orientation = detectOrientation(ship);
         btn.dataset.ship = ship.type;
         btn.dataset.orientation = orientation;
         btn.dataset.frame = cell.hit ? "hit" : "ok";
-        if (meta?.sprite) {
-          btn.dataset.sprite = meta.sprite;
+        const spriteFrame = getSpriteFrame(ship, orientation, !!cell.hit);
+        if (spriteFrame) {
+          btn.dataset.sprite = spriteFrame.sprite;
+          btn.style.setProperty("--sprite-url", `url(${spriteFrame.sprite})`);
+          btn.style.setProperty("--sprite-frame-index", spriteFrame.index);
+          btn.style.setProperty("--sprite-frame-count", spriteFrame.count);
+          btn.style.setProperty("--sprite-size", `${spriteFrame.size}px`);
         }
       }
 
@@ -299,6 +303,24 @@ function detectOrientation(ship) {
   return first[0] === second[0] ? "v" : "h";
 }
 
+function getSpriteFrame(ship, orientation, isHit) {
+  const meta = state.spriteMeta?.get(ship.type);
+  if (!meta?.frames || !meta.sprite) return null;
+  const framesForOrientation = meta.frames?.[orientation] || {};
+  const frameKey = isHit ? "hit" : "ok";
+  if (typeof framesForOrientation[frameKey] !== "number") return null;
+  const frameValues = Object.values(meta.frames)
+    .flatMap(entry => Object.values(entry))
+    .filter(v => typeof v === "number");
+  const frameCount = frameValues.length ? Math.max(...frameValues) + 1 : 1;
+  return {
+    sprite: meta.sprite,
+    index: framesForOrientation[frameKey],
+    count: frameCount,
+    size: meta.size || 32
+  };
+}
+
 async function loadSpriteMeta() {
   try {
     const res = await fetch(SPRITE_META_URL);
@@ -306,6 +328,10 @@ async function loadSpriteMeta() {
     const map = new Map();
     (data || []).forEach(entry => map.set(entry.id, entry));
     state.spriteMeta = map;
+    const match = client.getState().match;
+    if (match) {
+      render(match, match, { logs: [] });
+    }
   } catch (_) {
     state.spriteMeta = null;
   }

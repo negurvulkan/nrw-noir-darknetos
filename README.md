@@ -1,6 +1,6 @@
 # NRW Noir DarknetOS
 
-Version 1.10.0
+Version 1.10.1
 
 Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Creator-Tools für eigene Adventures.
 
@@ -31,6 +31,10 @@ Interaktive Terminal-Simulation mit Spielen (TicTacToe, Adventure Engine) und Cr
 ## Neu in 1.8.0
 
 - Neues Haunting-System: Mit geringer Chance heftet sich ein Geist persistent an den User. Spuk-Linien und Glitches erscheinen zeitgesteuert (localStorage-basiert), `haunt` zeigt den Status, `haunt calm` schwächt die Intensität leicht. Das Séance-Minigame kann den Spuk via `seance banish` beenden; Cooldowns und TTLs steuern Häufigkeit und Dauer.
+
+## Neu in 1.10.1
+
+- Ghostships kennzeichnet jetzt Treffer auf der eigenen Flotte deutlich: Terminal-Grids nutzen `=` auf getroffenen Segmenten, die GUI zeigt den passenden Framesheet-Hitframe auf den Schiffskacheln.
 
 ## Neu in 1.10.0
 

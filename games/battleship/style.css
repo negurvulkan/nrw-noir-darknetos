@@ -138,6 +138,12 @@ input, select {
   inset: 0;
   border-radius: 6px;
   pointer-events: none;
+  background-image: var(--sprite-url, none);
+  background-repeat: no-repeat;
+  background-size: calc(var(--sprite-size, 32px) * var(--sprite-frame-count, 4)) var(--sprite-size, 32px);
+  background-position: calc(var(--sprite-frame-index, 0) * var(--sprite-size, 32px) * -1) 0;
+  image-rendering: pixelated;
+  opacity: .92;
 }
 .cell.ship.hit::after { border: 1px solid rgba(255,255,255,.08); }
 .cell.hit { background: #3b0d24; color: #ffb2d3; }
