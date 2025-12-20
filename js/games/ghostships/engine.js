@@ -8,6 +8,10 @@
   const BATTLESHIP_BASE = "content/games/battleship";
   const SHIP_INDEX_URL = `${BATTLESHIP_BASE}/ships/index.json`;
   const MATCH_CONFIG_URL = `${BATTLESHIP_BASE}/config.json`;
+  const BOARD_LETTERS = {
+    8: ["A", "B", "C", "D", "E", "F", "G", "H"],
+    10: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+  };
 
   let shipCatalogCache = null;
   let matchConfigCache = null;
@@ -373,6 +377,13 @@
     loadBattleshipCatalog,
     loadBattleshipConfig,
     SHIP_INDEX_URL,
-    MATCH_CONFIG_URL
+    MATCH_CONFIG_URL,
+    boardLetters(size) {
+      const letters = BOARD_LETTERS[size];
+      if (letters && Array.isArray(letters)) return letters;
+      const safeSize = Number.isFinite(size) ? size : BOARD_LETTERS[8].length;
+      const clamped = Math.max(BOARD_LETTERS[8].length, Math.min(safeSize, BOARD_LETTERS[10].length));
+      return BOARD_LETTERS[10].slice(0, clamped);
+    }
   };
 })(window);
